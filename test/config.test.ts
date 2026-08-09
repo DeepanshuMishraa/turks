@@ -118,6 +118,20 @@ describe("StackConfig", () => {
     expect(result.error.message).toBe("Data layer 'gorm' was provided without a database.");
     expect(result.error.recovery).toContain("Add --database");
   });
+
+  it("accepts an explicit data-layer opt-out for a preset with no database", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      preset: "expo-rust",
+      dataLayer: "none",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.database).toEqual({ kind: "none" });
+  });
 });
 
 describe("Planner", () => {
