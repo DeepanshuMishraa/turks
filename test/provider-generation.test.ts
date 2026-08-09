@@ -1,0 +1,119 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Command, CommandError, CommandRunner } from "../src/core/command.js";
+import type { BackendSelection, ClientSelection, StackConfig } from "../src/core/config.js";
+import { StackConfig as StackConfigModule } from "../src/core/config.js";
+import { generateProject } from "../src/core/generate.js";
+import { Planner } from "../src/core/planner.js";
+import { Result, type Result as ResultValue } from "../src/core/result.js";
+import { DATA_LAYERS, DATA_LAYER_SUPPORT, type DataLayerKind } from "../src/core/support.js";
+
+class MatrixCommandRunner implements CommandRunner {
+  readonly commands: Command[] = [];
+
+  async run(command: Command): Promise<ResultValue<void, CommandError>> {
+    this.commands.push(command);
+    if (command.executable === "cargo" && command.args[0] === "new") {
+      const api = path.join(command.cwd, "apps/api");
+      await mkdir(path.join(api, "src"), { recursive: true });
+      await writeFile(path.join(api, "Cargo.toml"), "[package]\nname = \"matrix-api\"\nversion = \"0.1.0\"\nedition = \"2024\"\n", "utf8");
+      await writeFile(path.join(api, "src/main.rs"), "fn main() {}\n", "utf8");
+    }
+    return Result.ok(undefined);
+  }
+}
+
+const backendSelections: readonly Exclude<BackendSelection, { readonly kind: "none" }>[] = [
+  { kind: "rust", framework: "none" }, { kind: "rust", framework: "axum" }, { kind: "rust", framework: "actix-web" }, { kind: "rust", framework: "rocket" },
+  { kind: "go", framework: "none" }, { kind: "go", framework: "stdlib" }, { kind: "go", framework: "chi" }, { kind: "go", framework: "gin" }, { kind: "go", framework: "fiber" }, { kind: "go", framework: "echo" },
+  { kind: "typescript", framework: "none" }, { kind: "typescript", framework: "hono" }, { kind: "typescript", framework: "express" }, { kind: "typescript", framework: "fastify" }, { kind: "typescript", framework: "nest" },
+  { kind: "python", framework: "none" }, { kind: "python", framework: "fastapi" }, { kind: "python", framework: "django" }, { kind: "python", framework: "flask" }, { kind: "python", framework: "litestar" },
+];
+
+const clientSelections: readonly ClientSelection[] = [
+  { kind: "expo" }, { kind: "next" }, { kind: "react-vite" }, { kind: "vue-vite" }, { kind: "sveltekit" }, { kind: "astro" }, { kind: "react-native" }, { kind: "tauri" }, { kind: "electron" },
+];
+
+function backendFor(dataLayer: Exclude<DataLayerKind, "none">): Exclude<BackendSelection, { readonly kind: "none" }> {
+  const language = DATA_LAYER_SUPPORT[dataLayer].languages[0];
+  switch (language) {
+    case "rust": return { kind: "rust", framework: "axum" };
+    case "go": return { kind: "go", framework: "chi" };
+    case "typescript": return { kind: "typescript", framework: "hono" };
+    case "python": return { kind: "python", framework: dataLayer === "django-orm" ? "django" : "fastapi" };
+    case undefined: return { kind: "rust", framework: "none" };
+  }
+  return { kind: "rust", framework: "none" };
+}
+
+let parent: string;
+
+beforeAll(async () => {
+  parent = await mkdtemp(path.join(os.tmpdir(), "turks-matrix-"));
+});
+
+afterAll(async () => {
+  await rm(parent, { recursive: true, force: true });
+});
+
+async function generate(
+  name: string,
+  backend: BackendSelection,
+  database: StackConfig["database"],
+  clients: readonly ClientSelection[] = [],
+  runner: CommandRunner = new MatrixCommandRunner(),
+): Promise<boolean> {
+  const candidate: StackConfig = {
+    projectName: name,
+    destination: path.join(parent, name),
+    clients,
+    backend,
+    database,
+    packageManager: "pnpm",
+    orchestrator: "none",
+    docker: false,
+    githubActions: false,
+    install: false,
+    initializeGit: false,
+  };
+  const config = StackConfigModule.create(candidate);
+  if (!config.ok) return false;
+  const plan = Planner.create(config.value);
+  if (!plan.ok) return false;
+  return (await generateProject({ config: config.value, plan: plan.value, runner })).ok;
+}
+
+describe("provider generation", () => {
+  it("generates every client independently and together", async () => {
+    for (const [index, client] of clientSelections.entries()) {
+      expect(await generate(`client-${index}`, { kind: "none" }, { kind: "none" }, [client]), client.kind).toBe(true);
+    }
+    expect(await generate("clients-combined", { kind: "none" }, { kind: "none" }, clientSelections)).toBe(true);
+  });
+
+  it("prevents Electron from creating a nested Git repository", async () => {
+    const runner = new MatrixCommandRunner();
+    expect(await generate("electron-git", { kind: "none" }, { kind: "none" }, [{ kind: "electron" }], runner)).toBe(true);
+    expect(runner.commands.some((command) => command.args.includes("create-electron-app@latest") && command.args.includes("--skip-git"))).toBe(true);
+  });
+
+  it("generates every backend framework with no database", async () => {
+    for (const [index, backend] of backendSelections.entries()) {
+      expect(await generate(`backend-${index}`, backend, { kind: "none" }), `${backend.kind}/${backend.framework}`).toBe(true);
+    }
+  });
+
+  it("generates every declared data-layer/database binding", async () => {
+    let index = 0;
+    for (const dataLayer of DATA_LAYERS) {
+      if (dataLayer === "none") continue;
+      for (const database of DATA_LAYER_SUPPORT[dataLayer].databases) {
+        expect(await generate(`data-${index}`, backendFor(dataLayer), { kind: database, dataLayer }), `${dataLayer}/${database}`).toBe(true);
+        index += 1;
+      }
+    }
+    expect(index).toBeGreaterThan(30);
+  });
+});
