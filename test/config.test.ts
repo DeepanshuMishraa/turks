@@ -68,9 +68,9 @@ describe("StackConfig", () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok && "message" in result.error) {
-      expect(result.error.message).toContain("without a database");
-    }
+    if (result.ok) throw new Error("Expected data-layer validation to fail.");
+    if (!("message" in result.error)) throw new Error("Expected an input validation error.");
+    expect(result.error.message).toContain("without a database");
   });
 
   it("allows explicit preset boolean overrides", async () => {
@@ -101,6 +101,22 @@ describe("StackConfig", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.database).toEqual({ kind: "postgres", dataLayer: "seaorm" });
+  });
+
+  it("reports an actionable error when a preset has no database", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      preset: "next-go",
+      dataLayer: "gorm",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected preset data-layer validation to fail.");
+    if (!("message" in result.error)) throw new Error("Expected an input validation error.");
+    expect(result.error.message).toBe("Data layer 'gorm' was provided without a database.");
+    expect(result.error.recovery).toContain("Add --database");
   });
 });
 

@@ -247,7 +247,7 @@ function optionInput(projectName: string | undefined, options: CliOptions): Resu
     if (!database.ok) return database;
     input = { ...input, database: database.value };
   } else if (dataLayerValue !== undefined) {
-    if (input.database === undefined) {
+    if (input.database === undefined || input.database.kind === "none") {
       return Result.error({
         message: `Data layer '${dataLayerValue}' was provided without a database.`,
         recovery: "Add --database with a compatible database, or remove --data-layer.",
