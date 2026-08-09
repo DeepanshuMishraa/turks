@@ -15,6 +15,7 @@ describe("package exports", () => {
   it("maps ESM and CommonJS runtimes to matching declaration formats", async () => {
     const contents = await readFile(path.resolve("package.json"), "utf8");
     const manifest = requireRecord(JSON.parse(contents), "package.json");
+    expect(manifest.bin).toEqual({ "create-turks": "dist/cli.js", turks: "dist/cli.js" });
     const exports = requireRecord(manifest.exports, "package.json exports");
     const rootExport = requireRecord(exports["."], "package.json root export");
     expect(rootExport.import).toEqual({ types: "./dist/index.d.ts", default: "./dist/index.js" });

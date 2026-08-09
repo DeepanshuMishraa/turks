@@ -29,8 +29,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "create-turks": "./dist/cli.js",
-    "turks": "./dist/cli.js"
+    "create-turks": "dist/cli.js",
+    "turks": "dist/cli.js"
   },
   "files": [
     "dist"
