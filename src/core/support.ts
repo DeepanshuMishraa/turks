@@ -13,6 +13,7 @@ export type RustFramework = (typeof BACKEND_FRAMEWORKS.rust)[number];
 export type GoFramework = (typeof BACKEND_FRAMEWORKS.go)[number];
 export type TypeScriptFramework = (typeof BACKEND_FRAMEWORKS.typescript)[number];
 export type PythonFramework = (typeof BACKEND_FRAMEWORKS.python)[number];
+export type BackendFramework = (typeof BACKEND_FRAMEWORKS)[BackendLanguage][number];
 
 export const DATABASES = ["none", "postgres", "mysql", "sqlite", "mongodb"] as const;
 export type DatabaseKind = (typeof DATABASES)[number];
@@ -42,7 +43,7 @@ export type DataLayerSupport = {
   readonly label: string;
   readonly languages: readonly BackendLanguage[];
   readonly databases: readonly Exclude<DatabaseKind, "none">[];
-  readonly frameworks?: readonly string[];
+  readonly frameworks?: readonly BackendFramework[];
 };
 
 export const DATA_LAYER_SUPPORT: Readonly<Record<Exclude<DataLayerKind, "none">, DataLayerSupport>> = {

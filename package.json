@@ -2,6 +2,7 @@
   "name": "create-turks",
   "version": "0.1.0",
   "description": "Compose production-ready polyglot application monorepos.",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/DeepanshuMishraa/turks.git"
@@ -11,6 +12,17 @@
     "url": "https://github.com/DeepanshuMishraa/turks/issues"
   },
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "create-turks": "./dist/cli.js",
     "turks": "./dist/cli.js"
@@ -19,8 +31,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/cli.ts src/index.ts --format esm --dts --clean",
+    "build": "tsup",
+    "coverage": "vitest run --coverage",
     "dev": "tsx src/cli.ts",
+    "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -33,7 +47,8 @@
     "commander": "^14.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^3.2.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",

@@ -88,8 +88,18 @@ export const Planner = {
       return Result.ok(undefined);
     };
 
-    for (const id of selectedGeneratorIds(config)) {
+    const selected = selectedGeneratorIds(config);
+    for (const id of selected.filter((candidate) => candidate !== "install" && candidate !== "git")) {
       const result = visit(id);
+      if (!result.ok) return result;
+    }
+
+    if (selected.includes("install")) {
+      const result = visit("install");
+      if (!result.ok) return result;
+    }
+    if (selected.includes("git")) {
+      const result = visit("git");
       if (!result.ok) return result;
     }
 

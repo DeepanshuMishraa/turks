@@ -2,7 +2,7 @@ import path from "node:path";
 import type { DataLayerKind, DatabaseKind } from "../core/support.js";
 import type { Generator } from "../core/generator.js";
 import { Result } from "../core/result.js";
-import { generationFailure, mergeProjectPackageJson, replaceProjectFile, runGeneratorCommand, writeProjectFile } from "./shared.js";
+import { generationFailure, mergeProjectCompilerOptions, mergeProjectPackageJson, replaceProjectFile, runGeneratorCommand, writeProjectFile } from "./shared.js";
 
 const SERVER_DATABASE_URLS: Readonly<Record<Exclude<DatabaseKind, "none" | "sqlite">, string>> = {
   postgres: "postgres://postgres:postgres@localhost:5432/app",
@@ -88,14 +88,14 @@ export const dieselGenerator: Generator = {
       cwd,
     });
     if (!diesel.ok) return diesel;
-    const native = database === "mysql"
+    const native: readonly [packageName: string, feature: string] = database === "mysql"
       ? ["mysqlclient-sys", "bundled"]
       : database === "postgres"
         ? ["pq-sys", "bundled"]
         : ["libsqlite3-sys", "bundled"];
     return await runGeneratorCommand(context, "diesel", {
       executable: "cargo",
-      args: ["add", native[0] ?? "", "--features", native[1] ?? ""],
+      args: ["add", native[0], "--features", native[1]],
       cwd,
     });
   },
@@ -181,6 +181,12 @@ function typeScriptDataLayerGenerator(id: "drizzle" | "prisma" | "typeorm" | "ky
             ? { dependencies }
             : { dependencies, devDependencies: packages.devDependencies },
         );
+        if (id === "typeorm") {
+          await mergeProjectCompilerOptions(context, "apps/api/tsconfig.json", {
+            experimentalDecorators: true,
+            emitDecoratorMetadata: true,
+          });
+        }
         if (id === "prisma") {
           await writeProjectFile(context, "apps/api/prisma/schema.prisma", `generator client {\n  provider = "prisma-client-js"\n}\n\ndatasource db {\n  provider = "${prismaProvider(database)}"\n  url      = env("DATABASE_URL")\n}\n`);
         }
@@ -209,6 +215,14 @@ const PYTHON_PACKAGES: Readonly<Record<"sqlalchemy" | "tortoise" | "pymongo" | "
   beanie: ["beanie>=1.30", "pymongo>=4.14"],
 };
 
+function insertPythonDependencies(contents: string, packages: readonly string[]): string {
+  const anchor = "dependencies = [";
+  if (!contents.includes(anchor)) {
+    throw new Error(`apps/api/pyproject.toml is missing the '${anchor}' dependency anchor.`);
+  }
+  return contents.replace(anchor, `${anchor}\n${packages.map((item) => `  "${item}",`).join("\n")}\n`);
+}
+
 function pythonLayerPackages(
   id: "sqlalchemy" | "tortoise" | "pymongo" | "beanie",
   database: Exclude<DatabaseKind, "none">,
@@ -230,7 +244,7 @@ function pythonDataLayerGenerator(id: "sqlalchemy" | "tortoise" | "pymongo" | "b
       const database = selectedDatabase(context);
       const packages = pythonLayerPackages(id, database);
       try {
-        await replaceProjectFile(context, "apps/api/pyproject.toml", (contents) => contents.replace("dependencies = [", `dependencies = [\n${packages.map((item) => `  "${item}",`).join("\n")}\n`));
+        await replaceProjectFile(context, "apps/api/pyproject.toml", (contents) => insertPythonDependencies(contents, packages));
         return Result.ok(undefined);
       } catch (error) {
         return generationFailure(id, error);
@@ -256,7 +270,7 @@ export const djangoOrmGenerator: Generator = {
         ? ["dj-database-url>=2.3", "pymysql>=1.1"]
         : ["dj-database-url>=2.3"];
     try {
-      await replaceProjectFile(context, "apps/api/pyproject.toml", (contents) => contents.replace("dependencies = [", `dependencies = [\n${packages.map((item) => `  "${item}",`).join("\n")}\n`));
+      await replaceProjectFile(context, "apps/api/pyproject.toml", (contents) => insertPythonDependencies(contents, packages));
       await writeProjectFile(context, "apps/api/config/database.py", `import dj_database_url\n\nDATABASES = {"default": dj_database_url.config(default="${databaseUrl(database, "django-orm")}")}\n`);
       await replaceProjectFile(context, "apps/api/config/settings.py", (contents) => `${contents}\nfrom .database import DATABASES\n`);
       return Result.ok(undefined);

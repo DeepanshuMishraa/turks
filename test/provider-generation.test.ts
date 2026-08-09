@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -97,6 +97,41 @@ describe("provider generation", () => {
     const runner = new MatrixCommandRunner();
     expect(await generate("electron-git", { kind: "none" }, { kind: "none" }, [{ kind: "electron" }], runner)).toBe(true);
     expect(runner.commands.some((command) => command.args.includes("create-electron-app@latest") && command.args.includes("--skip-git"))).toBe(true);
+  });
+
+  it("leaves Expo installation to the root install generator", async () => {
+    const runner = new MatrixCommandRunner();
+    expect(await generate("expo-install", { kind: "none" }, { kind: "none" }, [{ kind: "expo" }], runner)).toBe(true);
+    expect(runner.commands.some((command) => command.args.includes("create-expo-app@latest") && command.args.includes("--no-install"))).toBe(true);
+  });
+
+  it("writes safe package identifiers and scoped decorator settings", async () => {
+    const rustRunner = new MatrixCommandRunner();
+    expect(await generate("rust.safe-name", { kind: "rust", framework: "none" }, { kind: "none" }, [], rustRunner)).toBe(true);
+    expect(rustRunner.commands.some((command) => command.args.includes("rust-safe-name-api"))).toBe(true);
+
+    expect(await generate("hono.safe-name", { kind: "typescript", framework: "hono" }, { kind: "none" })).toBe(true);
+    const honoPackage = await readFile(path.join(parent, "hono.safe-name/apps/api/package.json"), "utf8");
+    const honoRootPackage = await readFile(path.join(parent, "hono.safe-name/package.json"), "utf8");
+    const honoTsconfig = await readFile(path.join(parent, "hono.safe-name/apps/api/tsconfig.json"), "utf8");
+    expect(honoPackage).toContain('"name": "@hono-safe-name/api"');
+    expect(honoRootPackage).toContain('"dev": "pnpm --filter \\"./apps/api\\" dev"');
+    expect(honoTsconfig).not.toContain("experimentalDecorators");
+
+    expect(await generate("nest-safe", { kind: "typescript", framework: "nest" }, { kind: "none" })).toBe(true);
+    const nestTsconfig = await readFile(path.join(parent, "nest-safe/apps/api/tsconfig.json"), "utf8");
+    expect(nestTsconfig).toContain('"experimentalDecorators": true');
+
+    expect(await generate("typeorm-safe", { kind: "typescript", framework: "hono" }, { kind: "postgres", dataLayer: "typeorm" })).toBe(true);
+    const typeormTsconfig = await readFile(path.join(parent, "typeorm-safe/apps/api/tsconfig.json"), "utf8");
+    expect(typeormTsconfig).toContain('"emitDecoratorMetadata": true');
+  });
+
+  it("generates environment-driven Django development settings", async () => {
+    expect(await generate("django-settings", { kind: "python", framework: "django" }, { kind: "none" })).toBe(true);
+    const settings = await readFile(path.join(parent, "django-settings/apps/api/config/settings.py"), "utf8");
+    expect(settings).toContain('os.getenv("SECRET_KEY", "development-only")');
+    expect(settings).toContain('.lower() in {"1", "true", "yes", "on"}');
   });
 
   it("generates every backend framework with no database", async () => {

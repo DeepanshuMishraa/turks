@@ -20,7 +20,7 @@ export type CliOptions = {
   readonly orchestrator?: string;
   readonly packageManager?: string;
   readonly preset?: string;
-  readonly ci?: string;
+  readonly ci?: string | boolean;
   readonly moon?: boolean;
   readonly docker?: boolean;
   readonly install: boolean;
@@ -245,15 +245,26 @@ function optionInput(projectName: string | undefined, options: CliOptions): Resu
     const database = parseDatabase(options.database, options.dataLayer ?? options.dbClient, backend);
     if (!database.ok) return database;
     input = { ...input, database: database.value };
+  } else {
+    const dataLayer = options.dataLayer ?? options.dbClient;
+    if (dataLayer !== undefined) {
+      return Result.error({
+        message: `Data layer '${dataLayer}' was provided without a database.`,
+        recovery: "Add --database with a compatible database, or remove --data-layer.",
+      });
+    }
   }
   if (options.orchestrator !== undefined) {
     if (options.orchestrator !== "none" && options.orchestrator !== "moon") return invalid("orchestrator", options.orchestrator, ["none", "moon"]);
     input = { ...input, orchestrator: options.orchestrator };
   } else if (options.moon === true) input = { ...input, orchestrator: "moon" };
-  if (options.docker === true) input = { ...input, docker: true };
+  if (options.docker !== undefined) input = { ...input, docker: options.docker };
   if (options.ci !== undefined) {
-    if (options.ci !== "github") return invalid("CI", options.ci, ["github"]);
-    input = { ...input, githubActions: true };
+    if (options.ci === false) input = { ...input, githubActions: false };
+    else {
+      if (options.ci !== "github") return invalid("CI", String(options.ci), ["github"]);
+      input = { ...input, githubActions: true };
+    }
   }
   if (options.packageManager !== undefined && options.packageManager !== "pnpm") return invalid("package manager", options.packageManager, ["pnpm"]);
   return Result.ok(input);

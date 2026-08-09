@@ -49,7 +49,7 @@ Interactive runs ask whether to initialize a Git repository. Use `--no-git` to o
 | Go data layers | GORM, Ent, Bun, or none |
 | TypeScript data layers | Drizzle, Prisma, TypeORM, Kysely, Mongoose, or none |
 | Python data layers | SQLAlchemy, Django ORM, Tortoise ORM, PyMongo, Beanie, or none |
-| Optional tooling | Docker Compose, GitHub Actions, Moon, dependency installation, Git initialization |
+| Optional tooling | Docker Compose (requires PostgreSQL, MySQL, or MongoDB), GitHub Actions, Moon, dependency installation, Git initialization |
 
 Turks validates compatibility before creating anything. For example, MongoDB is accepted with Prisma, TypeORM, Mongoose, PyMongo, or Beanie in their supported languages, but rejected with SQLx.
 

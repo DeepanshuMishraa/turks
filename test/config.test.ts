@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { StackConfig, type StackConfig as StackConfigValue } from "../src/core/config.js";
 import { Planner } from "../src/core/planner.js";
@@ -44,7 +45,7 @@ describe("StackConfig", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.projectName).toBe("current-project");
-    expect(result.value.destination).toBe("/tmp/Current Project");
+    expect(result.value.destination).toBe(path.resolve("/tmp/Current Project"));
   });
 
   it("initializes Git when non-interactive defaults are accepted", async () => {
@@ -57,6 +58,36 @@ describe("StackConfig", () => {
     if (!result.ok) return;
     expect(result.value.initializeGit).toBe(true);
   });
+
+  it("rejects a data layer without a database option", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      dataLayer: "sqlx",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok && "message" in result.error) {
+      expect(result.error.message).toContain("without a database");
+    }
+  });
+
+  it("allows explicit preset boolean overrides", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      preset: "expo-rust-postgres",
+      docker: false,
+      ci: false,
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.docker).toBe(false);
+    expect(result.value.githubActions).toBe(false);
+  });
 });
 
 describe("Planner", () => {
@@ -66,10 +97,25 @@ describe("Planner", () => {
     if (!plan.ok) return;
 
     const ids = plan.value.generators.map((generator) => generator.id);
+    for (const expected of ["root", "pnpm", "expo", "rust", "axum", "sqlx"] as const) {
+      expect(ids).toContain(expected);
+    }
     expect(ids.indexOf("root")).toBeLessThan(ids.indexOf("pnpm"));
     expect(ids.indexOf("pnpm")).toBeLessThan(ids.indexOf("expo"));
     expect(ids.indexOf("rust")).toBeLessThan(ids.indexOf("axum"));
     expect(ids.indexOf("axum")).toBeLessThan(ids.indexOf("sqlx"));
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("orders install after providers and Git after install", () => {
+    const plan = Planner.create({ ...referenceConfig(), install: true, initializeGit: true });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    const ids = plan.value.generators.map((generator) => generator.id);
+    const installIndex = ids.indexOf("install");
+    const gitIndex = ids.indexOf("git");
+    expect(installIndex).toBeGreaterThan(ids.indexOf("sqlx"));
+    expect(gitIndex).toBeGreaterThan(installIndex);
   });
 });

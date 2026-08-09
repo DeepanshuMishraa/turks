@@ -52,6 +52,23 @@ export async function mergeProjectPackageJson(
   });
 }
 
+export async function mergeProjectCompilerOptions(
+  context: GenerationContext,
+  relativePath: string,
+  additions: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const destination = path.join(context.rootDir, relativePath);
+  const contents = await readFile(destination, "utf8");
+  const parsed: unknown = JSON.parse(contents);
+  if (!isRecord(parsed)) throw new Error(`${relativePath} does not contain a JSON object.`);
+
+  const compilerOptions = isRecord(parsed.compilerOptions) ? parsed.compilerOptions : {};
+  await writeProjectJson(context, relativePath, {
+    ...parsed,
+    compilerOptions: { ...compilerOptions, ...additions },
+  });
+}
+
 export async function replaceProjectFile(
   context: GenerationContext,
   relativePath: string,

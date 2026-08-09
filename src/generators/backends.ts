@@ -1,7 +1,12 @@
 import path from "node:path";
 import type { Generator } from "../core/generator.js";
 import { Result } from "../core/result.js";
-import { generationFailure, mergeProjectPackageJson, runGeneratorCommand, writeProjectFile, writeProjectJson } from "./shared.js";
+import { generationFailure, mergeProjectCompilerOptions, mergeProjectPackageJson, runGeneratorCommand, writeProjectFile, writeProjectJson } from "./shared.js";
+
+function packageIdentifier(projectName: string): string {
+  const normalized = projectName.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^[._]+/, "");
+  return normalized.length > 0 ? normalized : "turks-app";
+}
 
 export const rustGenerator: Generator = {
   id: "rust",
@@ -10,7 +15,7 @@ export const rustGenerator: Generator = {
   async generate(context) {
     return await runGeneratorCommand(context, "rust", {
       executable: "cargo",
-      args: ["new", "apps/api", "--bin", "--name", `${context.config.projectName}-api`],
+      args: ["new", "apps/api", "--bin", "--name", `${packageIdentifier(context.config.projectName)}-api`],
     });
   },
 };
@@ -183,7 +188,7 @@ export const typescriptGenerator: Generator = {
   async generate(context) {
     try {
       await writeProjectJson(context, "apps/api/package.json", {
-        name: `@${context.config.projectName}/api`,
+        name: `@${packageIdentifier(context.config.projectName)}/api`,
         private: true,
         type: "module",
         scripts: { dev: "tsx watch src/index.ts", build: "tsc", start: "node dist/index.js" },
@@ -197,8 +202,6 @@ export const typescriptGenerator: Generator = {
           moduleResolution: "NodeNext",
           strict: true,
           esModuleInterop: true,
-          experimentalDecorators: true,
-          emitDecoratorMetadata: true,
           outDir: "dist",
           rootDir: "src",
         },
@@ -239,6 +242,7 @@ function typeScriptFrameworkGenerator(
   dependencies: Readonly<Record<string, string>>,
   devDependencies: Readonly<Record<string, string>>,
   source: string,
+  compilerOptions?: Readonly<Record<string, unknown>>,
 ): Generator {
   return {
     id,
@@ -247,6 +251,9 @@ function typeScriptFrameworkGenerator(
     async generate(context) {
       try {
         await mergeProjectPackageJson(context, "apps/api/package.json", { dependencies, devDependencies });
+        if (compilerOptions !== undefined) {
+          await mergeProjectCompilerOptions(context, "apps/api/tsconfig.json", compilerOptions);
+        }
         await writeProjectFile(context, "apps/api/src/index.ts", source);
         return Result.ok(undefined);
       } catch (error) {
@@ -276,6 +283,7 @@ export const nestGenerator = typeScriptFrameworkGenerator(
   { "@nestjs/common": "^11.1.0", "@nestjs/core": "^11.1.0", "reflect-metadata": "^0.2.2", rxjs: "^7.8.0" },
   {},
   `import "reflect-metadata";\nimport { Controller, Get, Module } from "@nestjs/common";\nimport { NestFactory } from "@nestjs/core";\n\n@Controller()\nclass HealthController {\n  @Get("health") health(): string { return "ok"; }\n}\n\n@Module({ controllers: [HealthController] })\nclass AppModule {}\n\nconst app = await NestFactory.create(AppModule);\nawait app.listen(3000);\n`,
+  { experimentalDecorators: true, emitDecoratorMetadata: true },
 );
 
 export const pythonGenerator: Generator = {
@@ -332,7 +340,7 @@ export const djangoGenerator: Generator = {
       await writeProjectFile(context, "apps/api/pyproject.toml", `[project]\nname = "${context.config.projectName}-api"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = ["django>=5.2"]\n`);
       await writeProjectFile(context, "apps/api/manage.py", `#!/usr/bin/env python\nimport os\nimport sys\n\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")\nfrom django.core.management import execute_from_command_line\nexecute_from_command_line(sys.argv)\n`);
       await writeProjectFile(context, "apps/api/config/__init__.py", "");
-      await writeProjectFile(context, "apps/api/config/settings.py", `SECRET_KEY = "development-only"\nDEBUG = True\nROOT_URLCONF = "config.urls"\nINSTALLED_APPS = []\nMIDDLEWARE = []\nALLOWED_HOSTS = ["localhost", "127.0.0.1"]\n`);
+      await writeProjectFile(context, "apps/api/config/settings.py", `import os\n\nSECRET_KEY = os.getenv("SECRET_KEY", "development-only")\nDEBUG = os.getenv("DEBUG", "true").lower() in {"1", "true", "yes", "on"}\nROOT_URLCONF = "config.urls"\nINSTALLED_APPS = []\nMIDDLEWARE = []\nALLOWED_HOSTS = ["localhost", "127.0.0.1"]\n`);
       await writeProjectFile(context, "apps/api/config/urls.py", `from django.http import HttpResponse\nfrom django.urls import path\n\ndef health(_request):\n    return HttpResponse("ok")\n\nurlpatterns = [path("health", health)]\n`);
       return Result.ok(undefined);
     } catch (error) {

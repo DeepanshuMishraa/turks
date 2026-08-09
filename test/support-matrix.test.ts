@@ -56,6 +56,23 @@ function config(backend: BackendSelection, database: DatabaseSelection): StackCo
 }
 
 describe("declared support matrix", () => {
+  it("matches representative compatibility expectations", () => {
+    const cases: readonly {
+      readonly backend: BackendSelection;
+      readonly database: DatabaseSelection;
+      readonly compatible: boolean;
+    }[] = [
+      { backend: { kind: "rust", framework: "axum" }, database: { kind: "mongodb", dataLayer: "sqlx" }, compatible: false },
+      { backend: { kind: "python", framework: "django" }, database: { kind: "postgres", dataLayer: "django-orm" }, compatible: true },
+      { backend: { kind: "python", framework: "fastapi" }, database: { kind: "postgres", dataLayer: "django-orm" }, compatible: false },
+      { backend: { kind: "typescript", framework: "hono" }, database: { kind: "mongodb", dataLayer: "mongoose" }, compatible: true },
+    ];
+
+    for (const candidate of cases) {
+      expect(StackConfigModule.create(config(candidate.backend, candidate.database)).ok).toBe(candidate.compatible);
+    }
+  });
+
   it("plans every non-empty combination of clients", () => {
     const combinations = 2 ** CLIENTS.length;
     for (let mask = 1; mask < combinations; mask += 1) {

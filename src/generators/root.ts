@@ -53,8 +53,15 @@ function rootScripts(config: Parameters<Generator["generate"]>[0]["config"]): Re
     buildCommands.push("uv sync --directory apps/api");
   }
 
+  const firstDevCommand = devCommands[0];
+  const dev = firstDevCommand === undefined
+    ? "echo 'Nothing to run'"
+    : devCommands.length === 1
+      ? firstDevCommand
+      : `concurrently --kill-others-on-fail ${devCommands.map((command) => JSON.stringify(command)).join(" ")}`;
+
   return {
-    dev: `concurrently --kill-others-on-fail ${devCommands.map((command) => JSON.stringify(command)).join(" ")}`,
+    dev,
     build: buildCommands.length > 0 ? buildCommands.join(" && ") : "echo 'Nothing to build'",
   };
 }

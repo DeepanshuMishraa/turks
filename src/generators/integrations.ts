@@ -34,10 +34,10 @@ export const dockerGenerator: Generator = {
       return generationFailure("docker", new Error("No containerized database was selected."));
     }
     const service = context.config.database.kind === "postgres"
-      ? `  postgres:\n    image: postgres:17-alpine\n    environment:\n      POSTGRES_DB: app\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres\n    ports:\n      - '5432:5432'\n    volumes:\n      - database-data:/var/lib/postgresql/data\n    healthcheck:\n      test: ['CMD-SHELL', 'pg_isready -U postgres -d app']\n      interval: 5s\n      timeout: 5s\n      retries: 10\n`
+      ? `  postgres:\n    image: postgres:17-alpine\n    environment:\n      POSTGRES_DB: app\n      POSTGRES_USER: postgres\n      POSTGRES_PASSWORD: postgres\n    ports:\n      - '127.0.0.1:5432:5432'\n    volumes:\n      - database-data:/var/lib/postgresql/data\n    healthcheck:\n      test: ['CMD-SHELL', 'pg_isready -U postgres -d app']\n      interval: 5s\n      timeout: 5s\n      retries: 10\n`
       : context.config.database.kind === "mysql"
-        ? `  mysql:\n    image: mysql:8.4\n    environment:\n      MYSQL_DATABASE: app\n      MYSQL_USER: mysql\n      MYSQL_PASSWORD: mysql\n      MYSQL_ROOT_PASSWORD: root\n    ports:\n      - '3306:3306'\n    volumes:\n      - database-data:/var/lib/mysql\n`
-        : `  mongodb:\n    image: mongo:8\n    ports:\n      - '27017:27017'\n    volumes:\n      - database-data:/data/db\n`;
+        ? `  mysql:\n    image: mysql:8.4\n    environment:\n      MYSQL_DATABASE: app\n      MYSQL_USER: mysql\n      MYSQL_PASSWORD: mysql\n      MYSQL_ROOT_PASSWORD: root\n    ports:\n      - '127.0.0.1:3306:3306'\n    volumes:\n      - database-data:/var/lib/mysql\n`
+        : `  mongodb:\n    image: mongo:8\n    ports:\n      - '127.0.0.1:27017:27017'\n    volumes:\n      - database-data:/data/db\n`;
     try {
       await writeProjectFile(
         context,

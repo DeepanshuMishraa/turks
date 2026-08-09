@@ -8,7 +8,7 @@ export const expoGenerator: Generator = {
   async generate(context) {
     return await runGeneratorCommand(context, "expo", {
       executable: "pnpm",
-      args: ["dlx", "create-expo-app@latest", "apps/mobile", "--template", "blank-typescript", "--yes"],
+      args: ["dlx", "create-expo-app@latest", "apps/mobile", "--template", "blank-typescript", "--yes", "--no-install"],
     });
   },
 };

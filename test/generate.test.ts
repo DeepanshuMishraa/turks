@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Command, CommandRunner } from "../src/core/command.js";
 import type { StackConfig } from "../src/core/config.js";
 import { generateProject } from "../src/core/generate.js";
@@ -32,6 +32,7 @@ class FakeCommandRunner implements CommandRunner {
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(temporaryDirectories.splice(0).map(async (directory) => await rm(directory, { recursive: true, force: true })));
 });
 
@@ -59,13 +60,14 @@ describe("generateProject", () => {
     if (!plan.ok) return;
 
     const runner = new FakeCommandRunner();
+    vi.spyOn(process, "cwd").mockReturnValue(destination);
     const result = await generateProject({ config, plan: plan.value, runner });
     expect(result).toEqual({ ok: true, value: destination });
 
     await expect(readFile(path.join(destination, "pnpm-workspace.yaml"), "utf8")).resolves.toContain("apps/*");
     await expect(readFile(path.join(destination, "Cargo.toml"), "utf8")).resolves.toContain('members = ["apps/api"]');
     await expect(readFile(path.join(destination, "apps/api/src/main.rs"), "utf8")).resolves.toContain('route("/health"');
-    await expect(readFile(path.join(destination, "compose.yml"), "utf8")).resolves.toContain("postgres:17-alpine");
+    await expect(readFile(path.join(destination, "compose.yml"), "utf8")).resolves.toContain("127.0.0.1:5432:5432");
     await expect(readFile(path.join(destination, ".moon/workspace.yml"), "utf8")).resolves.toContain("apps/*");
     await expect(readFile(path.join(destination, ".moon/toolchains.yml"), "utf8")).resolves.toContain("packageManager: pnpm");
     await expect(readFile(path.join(destination, ".github/workflows/ci.yml"), "utf8")).resolves.toContain("rust-toolchain");
@@ -73,5 +75,38 @@ describe("generateProject", () => {
 
     expect(runner.commands.some((command) => command.args.includes("create-expo-app@latest"))).toBe(true);
     expect(runner.commands.filter((command) => command.executable === "cargo" && command.args[0] === "add")).toHaveLength(3);
+  });
+
+  it("converts progress exceptions to errors and removes temporary output", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "turks-progress-"));
+    temporaryDirectories.push(parent);
+    const destination = path.join(parent, "my-app");
+    const config: StackConfig = {
+      projectName: "my-app",
+      destination,
+      clients: [{ kind: "expo" }],
+      backend: { kind: "none" },
+      database: { kind: "none" },
+      packageManager: "pnpm",
+      orchestrator: "none",
+      docker: false,
+      githubActions: false,
+      install: false,
+      initializeGit: false,
+    };
+    const plan = Planner.create(config);
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    const result = await generateProject({
+      config,
+      plan: plan.value,
+      runner: new FakeCommandRunner(),
+      onProgress() { throw new Error("progress failed"); },
+    });
+
+    expect(result.ok).toBe(false);
+    await expect(access(destination)).rejects.toThrow();
+    expect(await readdir(parent)).toEqual([]);
   });
 });
