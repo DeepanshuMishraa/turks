@@ -17,10 +17,11 @@ class FakeCommandRunner implements CommandRunner {
     if (command.executable === "cargo" && command.args[0] === "new") {
       const api = path.join(command.cwd, "apps/api");
       await mkdir(path.join(api, "src"), { recursive: true });
+      await mkdir(path.join(api, ".git"));
       await writeFile(path.join(api, "Cargo.toml"), "[package]\nname = \"my-app-api\"\nversion = \"0.1.0\"\nedition = \"2024\"\n", "utf8");
       await writeFile(path.join(api, "src/main.rs"), "fn main() {}\n", "utf8");
     }
-    if (command.executable === "pnpm" && command.args.includes("create-expo-app@latest")) {
+    if (command.args.includes("create-expo-app@latest")) {
       const mobile = path.join(command.cwd, "apps/mobile");
       await mkdir(mobile, { recursive: true });
       await writeFile(path.join(mobile, "package.json"), '{"name":"mobile"}\n', "utf8");
@@ -57,7 +58,7 @@ describe("generateProject", () => {
       docker: true,
       githubActions: true,
       install: false,
-      initializeGit: false,
+      initializeGit: true,
     };
     const plan = Planner.create(config);
     expect(plan.ok).toBe(true);
@@ -76,8 +77,11 @@ describe("generateProject", () => {
     await expect(readFile(path.join(destination, ".moon/toolchains.yml"), "utf8")).resolves.toContain("packageManager: pnpm");
     await expect(readFile(path.join(destination, ".github/workflows/ci.yml"), "utf8")).resolves.toContain("rust-toolchain");
     await expect(readFile(path.join(destination, "README.md"), "utf8")).resolves.toContain("Rust workspace: Cargo");
+    await expect(readFile(path.join(destination, ".git/generated"), "utf8")).resolves.toContain("temporary git metadata");
+    await expect(access(path.join(destination, "apps/api/.git"))).rejects.toThrow();
 
     expect(runner.commands.some((command) => command.args.includes("create-expo-app@latest"))).toBe(true);
+    expect(runner.commands.some((command) => command.executable === "cargo" && command.args.includes("--vcs") && command.args.includes("none"))).toBe(true);
     expect(runner.commands.filter((command) => command.executable === "cargo" && command.args[0] === "add")).toHaveLength(3);
   });
 

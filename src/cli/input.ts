@@ -3,6 +3,7 @@ import * as p from "@clack/prompts";
 import type { BackendSelection, ClientSelection, ConfigIssue, DatabaseSelection, StackConfig } from "../core/config.js";
 import { StackConfig as StackConfigModule } from "../core/config.js";
 import { Result, type Result as ResultValue } from "../core/result.js";
+import { PackageManager, type PackageManager as PackageManagerValue } from "../core/package-manager.js";
 import { BACKEND_FRAMEWORKS, CLIENTS, DATA_LAYERS, DATA_LAYER_SUPPORT, DATABASES, SUPPORT_LABELS, type BackendLanguage, type ClientKind, type DataLayerKind, type DatabaseKind } from "../core/support.js";
 
 export type CliOptions = {
@@ -23,7 +24,7 @@ export type CliOptions = {
   readonly ci?: string | boolean;
   readonly moon?: boolean;
   readonly docker?: boolean;
-  readonly install: boolean;
+  readonly install?: boolean;
   readonly git?: boolean;
   readonly yes?: boolean;
   readonly dryRun?: boolean;
@@ -40,6 +41,7 @@ type ResolvedInput = {
   readonly orchestrator?: "none" | "moon";
   readonly docker?: boolean;
   readonly githubActions?: boolean;
+  readonly packageManager?: PackageManagerValue;
 };
 
 function invalid(option: string, value: string, expected: readonly string[]): ResultValue<never, InputError> {
@@ -119,6 +121,13 @@ function parseDataLayer(value: string): ResultValue<DataLayerKind, InputError> {
   switch (value) {
     case "none": case "sqlx": case "seaorm": case "diesel": case "gorm": case "ent": case "bun": case "drizzle": case "prisma": case "typeorm": case "kysely": case "mongoose": case "sqlalchemy": case "django-orm": case "tortoise": case "pymongo": case "beanie": return Result.ok(value);
     default: return invalid("data layer", value, DATA_LAYERS);
+  }
+}
+
+function parsePackageManager(value: string): ResultValue<PackageManagerValue, InputError> {
+  switch (value) {
+    case "npm": case "pnpm": case "bun": return Result.ok(value);
+    default: return invalid("package manager", value, PackageManager.values);
   }
 }
 
@@ -226,6 +235,15 @@ async function promptOrchestrator(): Promise<ResultValue<"none" | "moon", InputE
   return p.isCancel(value) ? cancelled() : Result.ok(value);
 }
 
+async function promptPackageManager(): Promise<ResultValue<PackageManagerValue, InputError>> {
+  const value = await p.select<PackageManagerValue>({
+    message: "Package manager?",
+    initialValue: "pnpm",
+    options: PackageManager.values.map((packageManager) => ({ value: packageManager, label: packageManager })),
+  });
+  return p.isCancel(value) ? cancelled() : Result.ok(value);
+}
+
 function frameworkOption(options: CliOptions, language: string): string | undefined {
   return options.framework ?? (language === "rust" ? options.rustFramework : language === "go" ? options.goFramework : language === "typescript" ? options.typescriptFramework : language === "python" ? options.pythonFramework : undefined);
 }
@@ -278,7 +296,11 @@ function optionInput(projectName: string | undefined, options: CliOptions): Resu
       input = { ...input, githubActions: true };
     }
   }
-  if (options.packageManager !== undefined && options.packageManager !== "pnpm") return invalid("package manager", options.packageManager, ["pnpm"]);
+  if (options.packageManager !== undefined) {
+    const packageManager = parsePackageManager(options.packageManager);
+    if (!packageManager.ok) return packageManager;
+    input = { ...input, packageManager: packageManager.value };
+  }
   return Result.ok(input);
 }
 
@@ -295,6 +317,8 @@ export async function resolveInput(cwd: string, projectName: string | undefined,
   if (!clients.ok) return clients;
   const backend = input.backend !== undefined ? Result.ok(input.backend) : defaults ? Result.ok({ kind: "rust", framework: "axum" } as const) : await promptBackend();
   if (!backend.ok) return backend;
+  const packageManager = input.packageManager !== undefined ? Result.ok(input.packageManager) : defaults ? Result.ok("pnpm" as const) : await promptPackageManager();
+  if (!packageManager.ok) return packageManager;
   const database = input.database !== undefined ? Result.ok(input.database) : defaults ? Result.ok({ kind: "postgres", dataLayer: "sqlx" } as const) : await promptDatabase(backend.value);
   if (!database.ok) return database;
   const orchestrator = input.orchestrator !== undefined ? Result.ok(input.orchestrator) : defaults ? Result.ok("none" as const) : await promptOrchestrator();
@@ -303,6 +327,8 @@ export async function resolveInput(cwd: string, projectName: string | undefined,
   if (!docker.ok) return docker;
   const ci = input.githubActions !== undefined ? Result.ok(input.githubActions) : defaults ? Result.ok(false) : await promptBoolean("Add GitHub Actions?", true);
   if (!ci.ok) return ci;
+  const install = options.install !== undefined ? Result.ok(options.install) : defaults ? Result.ok(true) : await promptBoolean(`Install dependencies with ${packageManager.value}?`, true);
+  if (!install.ok) return install;
   const git = options.git !== undefined ? Result.ok(options.git) : defaults ? Result.ok(true) : await promptBoolean("Initialize a Git repository?", true);
   if (!git.ok) return git;
 
@@ -312,11 +338,11 @@ export async function resolveInput(cwd: string, projectName: string | undefined,
     clients: clients.value,
     backend: backend.value,
     database: database.value,
-    packageManager: "pnpm",
+    packageManager: packageManager.value,
     orchestrator: orchestrator.value,
     docker: docker.value,
     githubActions: ci.value,
-    install: options.install,
+    install: install.value,
     initializeGit: git.value,
   });
 }

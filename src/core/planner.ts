@@ -8,7 +8,7 @@ export type GenerationPlan = {
 };
 
 function selectedGeneratorIds(config: StackConfig): readonly GeneratorId[] {
-  const ids: GeneratorId[] = ["root", "pnpm"];
+  const ids: GeneratorId[] = ["root", "package-manager"];
 
   for (const client of config.clients) ids.push(client.kind);
 

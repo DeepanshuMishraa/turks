@@ -3,7 +3,7 @@ import type { Result } from "./result.js";
 
 export type GeneratorId =
   | "root"
-  | "pnpm"
+  | "package-manager"
   | "expo"
   | "next"
   | "react-vite"

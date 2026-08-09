@@ -1,4 +1,5 @@
 import type { Generator } from "../core/generator.js";
+import { PackageManager } from "../core/package-manager.js";
 import { Result } from "../core/result.js";
 import { generationFailure, writeProjectFile } from "./shared.js";
 
@@ -8,6 +9,7 @@ export const moonGenerator: Generator = {
   dependencies: ["root"],
   async generate(context) {
     try {
+      const packageManager = context.config.packageManager;
       await writeProjectFile(
         context,
         ".moon/workspace.yml",
@@ -16,7 +18,7 @@ export const moonGenerator: Generator = {
       await writeProjectFile(
         context,
         ".moon/toolchains.yml",
-        `$schema: 'https://moonrepo.dev/schemas/toolchains.json'\njavascript:\n  packageManager: pnpm\npnpm:\n  version: '10.15.0'\n`,
+        `$schema: 'https://moonrepo.dev/schemas/toolchains.json'\njavascript:\n  packageManager: ${packageManager}\n${packageManager}:\n  version: '${PackageManager.version(packageManager)}'\n`,
       );
       return Result.ok(undefined);
     } catch (error) {
@@ -64,11 +66,17 @@ export const githubActionsGenerator: Generator = {
       go ? "      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.24'\n" : "",
       python ? "      - uses: astral-sh/setup-uv@v6\n" : "",
     ].join("");
+    const packageManager = context.config.packageManager;
+    const javascriptSetup = packageManager === "pnpm"
+      ? `      - uses: pnpm/action-setup@v4\n        with:\n          version: ${PackageManager.version("pnpm")}\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22\n`
+      : packageManager === "bun"
+        ? `      - uses: oven-sh/setup-bun@v2\n        with:\n          bun-version: ${PackageManager.version("bun")}\n`
+        : `      - uses: actions/setup-node@v4\n        with:\n          node-version: 22\n`;
     try {
       await writeProjectFile(
         context,
         ".github/workflows/ci.yml",
-        `name: CI\n\non:\n  push:\n  pull_request:\n\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 10.15.0\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22\n          cache: pnpm\n${languageSetup}      - run: pnpm install --frozen-lockfile\n      - run: pnpm build\n`,
+        `name: CI\n\non:\n  push:\n  pull_request:\n\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n${javascriptSetup}${languageSetup}      - run: ${packageManager} install\n      - run: ${PackageManager.runScript(packageManager, "build")}\n`,
       );
       return Result.ok(undefined);
     } catch (error) {

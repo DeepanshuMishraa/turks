@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
+import path from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -34,7 +35,7 @@ const program = new Command()
   .option("--database <database>", "database: none, postgres, mysql, sqlite, or mongodb")
   .option("--data-layer <library>", "compatible ORM, query builder, driver, or none")
   .option("--db-client <library>", "alias for --data-layer")
-  .option("--package-manager <manager>", "package manager (pnpm)")
+  .option("--package-manager <manager>", "package manager: npm, pnpm, or bun")
   .option("--orchestrator <orchestrator>", "workspace orchestrator: none (default) or moon")
   .option("--preset <preset>", "preset: expo-rust, expo-rust-postgres, or next-go")
   .option("--moon", "add an optional Moon workspace (advanced)")
@@ -64,13 +65,25 @@ async function directoryHasFiles(destination: string): Promise<boolean> {
   }
 }
 
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
   program.parse();
   const parsedOptions = program.opts<CliOptions>();
-  const { git: parsedGit, ...optionsWithoutGit } = parsedOptions;
-  const options: CliOptions = program.getOptionValueSource("git") === "cli" && parsedGit !== undefined
-    ? { ...optionsWithoutGit, git: parsedGit }
-    : optionsWithoutGit;
+  const { git: parsedGit, install: parsedInstall, ...optionsWithoutBooleanDefaults } = parsedOptions;
+  const optionsWithGit: CliOptions = program.getOptionValueSource("git") === "cli" && parsedGit !== undefined
+    ? { ...optionsWithoutBooleanDefaults, git: parsedGit }
+    : optionsWithoutBooleanDefaults;
+  const options: CliOptions = program.getOptionValueSource("install") === "cli" && parsedInstall !== undefined
+    ? { ...optionsWithGit, install: parsedInstall }
+    : optionsWithGit;
   const projectName = program.args.at(0);
 
   p.intro(chalk.bgCyan.black(" turks ") + chalk.dim(" build your stack. get your repo."));
@@ -113,6 +126,10 @@ async function main(): Promise<void> {
     }
   }
 
+  if (configResult.value.initializeGit && await pathExists(path.join(configResult.value.destination, ".git"))) {
+    console.log(chalk.dim("Git repository is already initialized. The existing root repository will be preserved."));
+  }
+
   console.log(chalk.cyan(`\nCreating ${configResult.value.projectName}...\n`));
   const generation = await generateProject({
     config: configResult.value,
@@ -132,7 +149,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const nextCommand = configResult.value.destination === process.cwd() ? "pnpm dev" : `cd ${configResult.value.projectName}\n  pnpm dev`;
+  const packageManager = configResult.value.packageManager;
+  const nextSteps = [
+    ...(configResult.value.destination === process.cwd() ? [] : [`cd ${configResult.value.projectName}`]),
+    ...(configResult.value.install ? [] : [`${packageManager} install`]),
+    [`${packageManager} run dev`],
+  ];
+  const nextCommand = nextSteps.join("\n  ");
   p.outro(`${chalk.green.bold("Done.")}\n\n  ${chalk.cyan(nextCommand)}`);
 }
 

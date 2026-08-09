@@ -117,6 +117,25 @@ async function rollbackOverlay(changes: readonly OverlayChange[]): Promise<reado
   return errors;
 }
 
+async function removeNestedGitDirectories(root: string, relativeDirectory = ""): Promise<void> {
+  const directory = path.join(root, relativeDirectory);
+  for (const entry of await readdir(directory)) {
+    const relativePath = path.join(relativeDirectory, entry);
+    const entryPath = path.join(root, relativePath);
+    const stats = await lstat(entryPath);
+    if (!stats.isDirectory()) continue;
+    if (entry === "node_modules") continue;
+    if (entry === ".git") {
+      if (relativeDirectory !== "") {
+        const cleanupError = await cleanup(entryPath);
+        if (cleanupError !== undefined) throw new Error(`Could not remove nested Git metadata: ${cleanupError}`);
+      }
+      continue;
+    }
+    await removeNestedGitDirectories(root, relativePath);
+  }
+}
+
 export async function generateProject(
   options: GenerateOptions,
 ): Promise<ResultValue<string, GenerationError>> {
@@ -187,6 +206,18 @@ export async function generateProject(
         generator.id,
       );
     }
+  }
+
+  try {
+    await removeNestedGitDirectories(temporary);
+  } catch (error) {
+    const cleanupError = await cleanup(temporary);
+    const cleanupDetail = cleanupError === undefined ? "" : ` Cleanup also failed: ${cleanupError}`;
+    return failed(
+      `Could not enforce root-only Git initialization: ${errorDetail(error)}${cleanupDetail}`,
+      "Check file permissions, then rerun turks. The incomplete project was not kept.",
+      "git",
+    );
   }
 
   const destinationIsCurrentDirectory = path.resolve(options.config.destination) === path.resolve(process.cwd());
