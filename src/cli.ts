@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFile, readdir } from "node:fs/promises";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -9,10 +10,18 @@ import { Planner } from "./core/planner.js";
 import { resolveInput, type CliOptions, type InputError } from "./cli/input.js";
 import type { ConfigIssue } from "./core/config.js";
 
+async function packageVersion(): Promise<string> {
+  const manifest: unknown = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  if (typeof manifest !== "object" || manifest === null || !("version" in manifest) || typeof manifest.version !== "string") {
+    throw new TypeError("package.json must contain a string version.");
+  }
+  return manifest.version;
+}
+
 const program = new Command()
   .name("turks")
   .description("Compose a polyglot application stack into one working monorepo.")
-  .version("0.1.0")
+  .version(await packageVersion())
   .argument("[project-name]", "project directory name")
   .option("--client <clients>", "comma-separated clients, or none")
   .option("--mobile <framework>", "alias for --client")
@@ -35,6 +44,7 @@ const program = new Command()
   .option("--no-ci", "do not add CI")
   .option("--yes", "accept smart defaults for missing choices")
   .option("--dry-run", "print the generation plan without writing files")
+  .option("--force", "merge into a non-empty destination without prompting")
   .option("--no-install", "skip dependency installation")
   .option("--no-git", "skip Git initialization");
 
@@ -43,6 +53,14 @@ function showInputError(error: InputError | readonly ConfigIssue[]): void {
   for (const issue of issues) {
     console.error(chalk.red.bold("✖ ") + chalk.red(issue.message));
     console.error(chalk.dim(issue.recovery));
+  }
+}
+
+async function directoryHasFiles(destination: string): Promise<boolean> {
+  try {
+    return (await readdir(destination)).length > 0;
+  } catch {
+    return false;
   }
 }
 
@@ -77,11 +95,30 @@ async function main(): Promise<void> {
     return;
   }
 
+  let mergeIntoExisting = false;
+  if (await directoryHasFiles(configResult.value.destination)) {
+    console.warn(chalk.yellow(`Warning: '${configResult.value.destination}' already contains files.`));
+    if (options.force === true) {
+      mergeIntoExisting = true;
+    } else {
+      const confirmed = await p.confirm({
+        message: "Continue and overwrite files that conflict with the generated project?",
+        initialValue: false,
+      });
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.outro(chalk.dim("Generation cancelled. Existing files were preserved."));
+        return;
+      }
+      mergeIntoExisting = true;
+    }
+  }
+
   console.log(chalk.cyan(`\nCreating ${configResult.value.projectName}...\n`));
   const generation = await generateProject({
     config: configResult.value,
     plan: planResult.value,
     runner: new ProcessCommandRunner(),
+    mergeIntoExisting,
     onProgress: ({ completed, total, label }) => {
       console.log(`${chalk.green("✓")} ${chalk.white(label)} ${chalk.dim(`(${completed}/${total})`)}`);
     },

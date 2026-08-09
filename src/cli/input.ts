@@ -27,6 +27,7 @@ export type CliOptions = {
   readonly git?: boolean;
   readonly yes?: boolean;
   readonly dryRun?: boolean;
+  readonly force?: boolean;
 };
 
 export type InputError = { readonly message: string; readonly recovery: string };

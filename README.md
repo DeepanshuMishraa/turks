@@ -35,6 +35,8 @@ Use `--client none`, `--backend none`, `--database none`, or `--data-layer none`
 
 Interactive runs ask whether to initialize a Git repository. Use `--no-git` to opt out in automated runs.
 
+When the destination already contains files, Turks asks before merging the generated project and overwriting conflicting paths. Use `--force` for deliberate non-interactive merging.
+
 ## Support matrix
 
 | Category | Choices |

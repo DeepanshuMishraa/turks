@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 import type { CommandRunner } from "./command.js";
 import type { StackConfig } from "./config.js";
@@ -17,8 +17,13 @@ export type GenerateOptions = {
   readonly config: StackConfig;
   readonly plan: GenerationPlan;
   readonly runner: CommandRunner;
+  readonly mergeIntoExisting?: boolean;
   readonly onProgress?: (progress: Progress) => void;
 };
+
+type OverlayChange =
+  | { readonly kind: "created"; readonly destination: string }
+  | { readonly kind: "replaced"; readonly destination: string; readonly backup: string };
 
 async function exists(target: string): Promise<boolean> {
   try {
@@ -55,14 +60,73 @@ function failed(
   });
 }
 
+async function overlayDirectory(
+  source: string,
+  destination: string,
+  backup: string,
+  changes: OverlayChange[],
+  relativeDirectory = "",
+): Promise<void> {
+  const sourceDirectory = path.join(source, relativeDirectory);
+  for (const entry of await readdir(sourceDirectory)) {
+    const relativePath = path.join(relativeDirectory, entry);
+    const sourcePath = path.join(source, relativePath);
+    const destinationPath = path.join(destination, relativePath);
+    const sourceStats = await lstat(sourcePath);
+    const destinationExists = await exists(destinationPath);
+
+    if (relativePath === ".git" && destinationExists) {
+      const cleanupError = await cleanup(sourcePath);
+      if (cleanupError !== undefined) throw new Error(`Could not discard temporary Git metadata: ${cleanupError}`);
+      continue;
+    }
+
+    if (sourceStats.isDirectory() && destinationExists && (await lstat(destinationPath)).isDirectory()) {
+      await overlayDirectory(source, destination, backup, changes, relativePath);
+      await rmdir(sourcePath);
+      continue;
+    }
+
+    if (destinationExists) {
+      const backupPath = path.join(backup, relativePath);
+      await mkdir(path.dirname(backupPath), { recursive: true });
+      await rename(destinationPath, backupPath);
+      changes.push({ kind: "replaced", destination: destinationPath, backup: backupPath });
+    } else {
+      changes.push({ kind: "created", destination: destinationPath });
+    }
+    await mkdir(path.dirname(destinationPath), { recursive: true });
+    await rename(sourcePath, destinationPath);
+  }
+}
+
+async function rollbackOverlay(changes: readonly OverlayChange[]): Promise<readonly string[]> {
+  const errors: string[] = [];
+  for (const change of [...changes].reverse()) {
+    const removalError = await cleanup(change.destination);
+    if (removalError !== undefined) errors.push(removalError);
+    if (change.kind === "replaced") {
+      try {
+        await mkdir(path.dirname(change.destination), { recursive: true });
+        await rename(change.backup, change.destination);
+      } catch (error) {
+        errors.push(`Could not restore '${change.destination}': ${errorDetail(error)}`);
+      }
+    }
+  }
+  return errors;
+}
+
 export async function generateProject(
   options: GenerateOptions,
 ): Promise<ResultValue<string, GenerationError>> {
   const destinationExists = await exists(options.config.destination);
+  let destinationHasEntries = false;
   if (destinationExists) {
     try {
       const entries = await readdir(options.config.destination);
-      if (entries.length > 0) {
+      destinationHasEntries = entries.length > 0;
+      if (destinationHasEntries && options.mergeIntoExisting !== true) {
         return Result.error({
           code: "destination-exists",
           message: `Destination '${options.config.destination}' is not empty.`,
@@ -80,6 +144,7 @@ export async function generateProject(
 
   const parent = path.dirname(options.config.destination);
   const temporary = path.join(parent, `.${options.config.projectName}.turks-${randomUUID()}`);
+  const backup = path.join(parent, `.${options.config.projectName}.turks-backup-${randomUUID()}`);
   try {
     await mkdir(parent, { recursive: true });
     await mkdir(temporary);
@@ -125,28 +190,32 @@ export async function generateProject(
   }
 
   const destinationIsCurrentDirectory = path.resolve(options.config.destination) === path.resolve(process.cwd());
-  const movedIntoCurrentDirectory: string[] = [];
+  const overlayChanges: OverlayChange[] = [];
+  const shouldOverlay = destinationExists && (destinationIsCurrentDirectory || destinationHasEntries);
   try {
-    if (destinationExists && destinationIsCurrentDirectory) {
-      for (const entry of await readdir(temporary)) {
-        await rename(path.join(temporary, entry), path.join(options.config.destination, entry));
-        movedIntoCurrentDirectory.push(entry);
-      }
+    if (shouldOverlay) {
+      await mkdir(backup);
+      await overlayDirectory(temporary, options.config.destination, backup, overlayChanges);
       await rmdir(temporary);
+      const backupCleanupError = await cleanup(backup);
+      if (backupCleanupError !== undefined) {
+        return failed(
+          `Project generation completed, but backup cleanup failed: ${backupCleanupError}`,
+          `The generated project is usable. Remove the leftover backup directory '${backup}' manually.`,
+        );
+      }
     } else {
       if (destinationExists) await rmdir(options.config.destination);
       await rename(temporary, options.config.destination);
     }
     return Result.ok(options.config.destination);
   } catch (error) {
-    const cleanupErrors: string[] = [];
-    for (const entry of movedIntoCurrentDirectory) {
-      const cleanupError = await cleanup(path.join(options.config.destination, entry));
-      if (cleanupError !== undefined) cleanupErrors.push(cleanupError);
-    }
+    const cleanupErrors = [...await rollbackOverlay(overlayChanges)];
     const temporaryCleanupError = await cleanup(temporary);
     if (temporaryCleanupError !== undefined) cleanupErrors.push(temporaryCleanupError);
-    if (destinationExists && !destinationIsCurrentDirectory && !(await exists(options.config.destination))) {
+    const backupCleanupError = await cleanup(backup);
+    if (backupCleanupError !== undefined) cleanupErrors.push(backupCleanupError);
+    if (destinationExists && !shouldOverlay && !(await exists(options.config.destination))) {
       try {
         await mkdir(options.config.destination, { recursive: true });
       } catch (restoreError) {
