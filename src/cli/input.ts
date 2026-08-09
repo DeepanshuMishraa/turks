@@ -240,19 +240,23 @@ function optionInput(projectName: string | undefined, options: CliOptions): Resu
     if (!backend.ok) return backend;
     input = { ...input, backend: backend.value };
   }
+  const dataLayerValue = options.dataLayer ?? options.dbClient;
   if (options.database !== undefined) {
     const backend = input.backend ?? { kind: "none" };
-    const database = parseDatabase(options.database, options.dataLayer ?? options.dbClient, backend);
+    const database = parseDatabase(options.database, dataLayerValue, backend);
     if (!database.ok) return database;
     input = { ...input, database: database.value };
-  } else {
-    const dataLayer = options.dataLayer ?? options.dbClient;
-    if (dataLayer !== undefined) {
+  } else if (dataLayerValue !== undefined) {
+    if (input.database === undefined) {
       return Result.error({
-        message: `Data layer '${dataLayer}' was provided without a database.`,
+        message: `Data layer '${dataLayerValue}' was provided without a database.`,
         recovery: "Add --database with a compatible database, or remove --data-layer.",
       });
     }
+    const backend = input.backend ?? { kind: "none" };
+    const database = parseDatabase(input.database.kind, dataLayerValue, backend);
+    if (!database.ok) return database;
+    input = { ...input, database: database.value };
   }
   if (options.orchestrator !== undefined) {
     if (options.orchestrator !== "none" && options.orchestrator !== "moon") return invalid("orchestrator", options.orchestrator, ["none", "moon"]);

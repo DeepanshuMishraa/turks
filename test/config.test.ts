@@ -88,6 +88,20 @@ describe("StackConfig", () => {
     expect(result.value.docker).toBe(false);
     expect(result.value.githubActions).toBe(false);
   });
+
+  it("applies a data-layer override to a preset database", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      preset: "expo-rust-postgres",
+      dataLayer: "seaorm",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.database).toEqual({ kind: "postgres", dataLayer: "seaorm" });
+  });
 });
 
 describe("Planner", () => {
