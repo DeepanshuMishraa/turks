@@ -1,4 +1,5 @@
 import type { Generator } from "../core/generator.js";
+import { PackageManager } from "../core/package-manager.js";
 import { Result } from "../core/result.js";
 import { generationFailure, runGeneratorCommand, writeProjectFile, writeProjectJson } from "./shared.js";
 
@@ -9,21 +10,21 @@ function rootScripts(config: Parameters<Generator["generate"]>[0]["config"]): Re
   for (const client of config.clients) {
     switch (client.kind) {
       case "expo": case "react-native":
-        devCommands.push(`pnpm --filter "./apps/${client.kind === "expo" ? "mobile" : client.kind}" start`);
+        devCommands.push(PackageManager.runWorkspaceScript(config.packageManager, `./apps/${client.kind === "expo" ? "mobile" : client.kind}`, "start"));
         break;
       case "next": case "react-vite": case "vue-vite": case "sveltekit": case "astro": {
         const directory = client.kind === "react-vite" ? "react" : client.kind === "vue-vite" ? "vue" : client.kind;
-        devCommands.push(`pnpm --filter "./apps/${directory}" dev`);
-        buildCommands.push(`pnpm --filter "./apps/${directory}" build`);
+        devCommands.push(PackageManager.runWorkspaceScript(config.packageManager, `./apps/${directory}`, "dev"));
+        buildCommands.push(PackageManager.runWorkspaceScript(config.packageManager, `./apps/${directory}`, "build"));
         break;
       }
       case "tauri":
-        devCommands.push('pnpm --filter "./apps/tauri" tauri dev');
-        buildCommands.push('pnpm --filter "./apps/tauri" tauri build');
+        devCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/tauri", "tauri", ["dev"]));
+        buildCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/tauri", "tauri", ["build"]));
         break;
       case "electron":
-        devCommands.push('pnpm --filter "./apps/electron" start');
-        buildCommands.push('pnpm --filter "./apps/electron" package');
+        devCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/electron", "start"));
+        buildCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/electron", "package"));
         break;
     }
   }
@@ -36,8 +37,8 @@ function rootScripts(config: Parameters<Generator["generate"]>[0]["config"]): Re
     buildCommands.push("go -C apps/api build .");
   }
   if (config.backend.kind === "typescript") {
-    devCommands.push('pnpm --filter "./apps/api" dev');
-    buildCommands.push('pnpm --filter "./apps/api" build');
+    devCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/api", "dev"));
+    buildCommands.push(PackageManager.runWorkspaceScript(config.packageManager, "./apps/api", "build"));
   }
   if (config.backend.kind === "python") {
     const command = config.backend.framework === "none"
@@ -66,24 +67,31 @@ function rootScripts(config: Parameters<Generator["generate"]>[0]["config"]): Re
   };
 }
 
+function allowedBuildDependencies(config: Parameters<Generator["generate"]>[0]["config"]): readonly string[] {
+  return [
+    ...(config.clients.some((client) => client.kind === "electron") ? ["electron"] : []),
+    ...(config.backend.kind === "typescript" || config.clients.some((client) => ["react-vite", "vue-vite", "sveltekit", "astro", "tauri"].includes(client.kind)) ? ["esbuild"] : []),
+    ...(config.database.kind === "sqlite" && config.backend.kind === "typescript" ? ["better-sqlite3"] : []),
+  ];
+}
+
 export const rootGenerator: Generator = {
   id: "root",
   label: "Root workspace",
   dependencies: [],
   async generate(context) {
     try {
-      const allowedBuildDependencies = [
-        ...(context.config.clients.some((client) => client.kind === "electron") ? ["electron"] : []),
-        ...(context.config.clients.some((client) => ["react-vite", "vue-vite", "sveltekit", "astro", "tauri"].includes(client.kind)) ? ["esbuild"] : []),
-        ...(context.config.database.kind === "sqlite" && context.config.backend.kind === "typescript" ? ["better-sqlite3"] : []),
-      ];
+      const packageManagerSettings = context.config.packageManager === "bun"
+        ? { trustedDependencies: allowedBuildDependencies(context.config) }
+        : {};
       await writeProjectJson(context, "package.json", {
         name: context.config.projectName,
         private: true,
+        workspaces: ["apps/*", "packages/*"],
         scripts: rootScripts(context.config),
         devDependencies: { concurrently: "^9.2.0" },
-        packageManager: "pnpm@10.15.0",
-        pnpm: { onlyBuiltDependencies: allowedBuildDependencies },
+        packageManager: PackageManager.manifestValue(context.config.packageManager),
+        ...packageManagerSettings,
       });
       await writeProjectFile(context, ".gitignore", "node_modules/\ntarget/\n.env\n.env.local\n.DS_Store\n");
       await writeProjectFile(context, ".env.example", "# Add project environment variables here.\n");
@@ -96,16 +104,22 @@ export const rootGenerator: Generator = {
   },
 };
 
-export const pnpmGenerator: Generator = {
-  id: "pnpm",
-  label: "pnpm workspace",
+export const packageManagerGenerator: Generator = {
+  id: "package-manager",
+  label: "JavaScript workspace",
   dependencies: ["root"],
   async generate(context) {
     try {
-      await writeProjectFile(context, "pnpm-workspace.yaml", "packages:\n  - 'apps/*'\n  - 'packages/*'\n");
+      if (context.config.packageManager === "pnpm") {
+        const dependencies = allowedBuildDependencies(context.config);
+        const allowedBuilds = dependencies.length === 0
+          ? ""
+          : `allowBuilds:\n${dependencies.map((dependency) => `  '${dependency}': true`).join("\n")}\n`;
+        await writeProjectFile(context, "pnpm-workspace.yaml", `packages:\n  - 'apps/*'\n  - 'packages/*'\n${allowedBuilds}`);
+      }
       return Result.ok(undefined);
     } catch (error) {
-      return generationFailure("pnpm", error);
+      return generationFailure("package-manager", error);
     }
   },
 };
@@ -132,10 +146,7 @@ export const installGenerator: Generator = {
   label: "Dependencies",
   dependencies: ["readme"],
   async generate(context) {
-    return await runGeneratorCommand(context, "install", {
-      executable: "pnpm",
-      args: ["install"],
-    });
+    return await runGeneratorCommand(context, "install", PackageManager.installCommand(context.config.packageManager));
   },
 };
 

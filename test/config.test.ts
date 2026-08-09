@@ -59,6 +59,43 @@ describe("StackConfig", () => {
     expect(result.value.initializeGit).toBe(true);
   });
 
+  it("accepts every supported package manager", async () => {
+    for (const packageManager of ["npm", "pnpm", "bun"] as const) {
+      const result = await resolveInput("/tmp", `app-${packageManager}`, {
+        packageManager,
+        install: false,
+        git: false,
+        yes: true,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.packageManager).toBe(packageManager);
+    }
+  });
+
+  it("installs dependencies when non-interactive defaults are accepted", async () => {
+    const result = await resolveInput("/tmp", "my-app", { git: false, yes: true });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.packageManager).toBe("pnpm");
+    expect(result.value.install).toBe(true);
+  });
+
+  it("rejects unsupported package managers", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      packageManager: "yarn",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok || !("message" in result.error)) return;
+    expect(result.error.message).toContain("Invalid package manager");
+    expect(result.error.recovery).toContain("npm, pnpm, bun");
+  });
+
   it("rejects a data layer without a database option", async () => {
     const result = await resolveInput("/tmp", "my-app", {
       dataLayer: "sqlx",
@@ -141,11 +178,11 @@ describe("Planner", () => {
     if (!plan.ok) return;
 
     const ids = plan.value.generators.map((generator) => generator.id);
-    for (const expected of ["root", "pnpm", "expo", "rust", "axum", "sqlx"] as const) {
+    for (const expected of ["root", "package-manager", "expo", "rust", "axum", "sqlx"] as const) {
       expect(ids).toContain(expected);
     }
-    expect(ids.indexOf("root")).toBeLessThan(ids.indexOf("pnpm"));
-    expect(ids.indexOf("pnpm")).toBeLessThan(ids.indexOf("expo"));
+    expect(ids.indexOf("root")).toBeLessThan(ids.indexOf("package-manager"));
+    expect(ids.indexOf("package-manager")).toBeLessThan(ids.indexOf("expo"));
     expect(ids.indexOf("rust")).toBeLessThan(ids.indexOf("axum"));
     expect(ids.indexOf("axum")).toBeLessThan(ids.indexOf("sqlx"));
     expect(new Set(ids).size).toBe(ids.length);

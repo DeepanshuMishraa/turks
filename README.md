@@ -33,7 +33,7 @@ npx create-turks@latest my-app \
 
 Use `--client none`, `--backend none`, `--database none`, or `--data-layer none` to omit a layer. Use `--dry-run` to inspect the exact generation plan without writing files.
 
-Interactive runs ask whether to initialize a Git repository. Use `--no-git` to opt out in automated runs.
+Interactive runs ask which package manager to use, whether to install dependencies, and whether to initialize a Git repository. Use `--package-manager npm|pnpm|bun`, `--no-install`, and `--no-git` in automated runs.
 
 When the destination already contains files, Turks asks before merging the generated project and overwriting conflicting paths. Use `--force` for deliberate non-interactive merging.
 
@@ -51,6 +51,7 @@ When the destination already contains files, Turks asks before merging the gener
 | Go data layers | GORM, Ent, Bun, or none |
 | TypeScript data layers | Drizzle, Prisma, TypeORM, Kysely, Mongoose, or none |
 | Python data layers | SQLAlchemy, Django ORM, Tortoise ORM, PyMongo, Beanie, or none |
+| Package managers | npm, pnpm, or Bun |
 | Optional tooling | Docker Compose (requires PostgreSQL, MySQL, or MongoDB), GitHub Actions, Moon, dependency installation, Git initialization |
 
 Turks validates compatibility before creating anything. For example, MongoDB is accepted with Prisma, TypeORM, Mongoose, PyMongo, or Beanie in their supported languages, but rejected with SQLx.
@@ -63,7 +64,7 @@ npx create-turks@latest my-app --client next,expo,tauri --backend go --framework
 
 ## Moon
 
-Moon is not required to build or use Turks. pnpm, Cargo, Go, and uv already provide the native workspace and build tools the generated repository needs.
+Moon is not required to build or use Turks. npm, pnpm, Bun, Cargo, Go, and uv already provide the native workspace and build tools the generated repository needs.
 
 Moon is an optional advanced output for teams that want a shared task graph and caching layer. It defaults to `none`; enable it with `--orchestrator moon` or `--moon`.
 

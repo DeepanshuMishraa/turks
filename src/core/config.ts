@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Result, type Result as ResultValue } from "./result.js";
 import { DATA_LAYER_SUPPORT, type DataLayerKind, type DatabaseKind, type GoFramework, type PythonFramework, type RustFramework, type TypeScriptFramework } from "./support.js";
+import type { PackageManager } from "./package-manager.js";
 
 export type ClientSelection =
   | { readonly kind: "expo" }
@@ -33,7 +34,7 @@ export type StackConfig = {
   readonly clients: readonly ClientSelection[];
   readonly backend: BackendSelection;
   readonly database: DatabaseSelection;
-  readonly packageManager: "pnpm";
+  readonly packageManager: PackageManager;
   readonly orchestrator: "none" | "moon";
   readonly docker: boolean;
   readonly githubActions: boolean;

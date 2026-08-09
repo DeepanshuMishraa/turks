@@ -15,7 +15,7 @@ export const rustGenerator: Generator = {
   async generate(context) {
     return await runGeneratorCommand(context, "rust", {
       executable: "cargo",
-      args: ["new", "apps/api", "--bin", "--name", `${packageIdentifier(context.config.projectName)}-api`],
+      args: ["new", "apps/api", "--bin", "--vcs", "none", "--name", `${packageIdentifier(context.config.projectName)}-api`],
     });
   },
 };
@@ -184,7 +184,7 @@ export const echoGenerator = goFrameworkGenerator("echo", "Echo", "github.com/la
 export const typescriptGenerator: Generator = {
   id: "typescript",
   label: "TypeScript backend",
-  dependencies: ["pnpm"],
+  dependencies: ["package-manager"],
   async generate(context) {
     try {
       await writeProjectJson(context, "apps/api/package.json", {

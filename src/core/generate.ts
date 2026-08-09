@@ -19,6 +19,7 @@ export type GenerateOptions = {
   readonly runner: CommandRunner;
   readonly mergeIntoExisting?: boolean;
   readonly onProgress?: (progress: Progress) => void;
+  readonly onWarning?: (warning: string) => void;
 };
 
 type OverlayChange =
@@ -117,6 +118,38 @@ async function rollbackOverlay(changes: readonly OverlayChange[]): Promise<reado
   return errors;
 }
 
+async function removeNestedGitArtifacts(root: string, relativeDirectory = ""): Promise<readonly string[]> {
+  const directory = path.join(root, relativeDirectory);
+  let entries: readonly string[];
+  try {
+    entries = await readdir(directory);
+  } catch (error) {
+    return [`Could not inspect '${relativeDirectory || "."}' for nested Git metadata: ${errorDetail(error)}`];
+  }
+
+  const warnings: string[] = [];
+  for (const entry of entries) {
+    const relativePath = path.join(relativeDirectory, entry);
+    const entryPath = path.join(root, relativePath);
+    if (entry === ".git") {
+      if (relativeDirectory !== "") {
+        const cleanupError = await cleanup(entryPath);
+        if (cleanupError !== undefined) warnings.push(`Could not remove nested Git metadata at '${relativePath}': ${cleanupError}`);
+      }
+      continue;
+    }
+    if (entry === "node_modules") continue;
+    try {
+      if ((await lstat(entryPath)).isDirectory()) {
+        warnings.push(...await removeNestedGitArtifacts(root, relativePath));
+      }
+    } catch (error) {
+      warnings.push(`Could not inspect '${relativePath}' for nested Git metadata: ${errorDetail(error)}`);
+    }
+  }
+  return warnings;
+}
+
 export async function generateProject(
   options: GenerateOptions,
 ): Promise<ResultValue<string, GenerationError>> {
@@ -193,6 +226,9 @@ export async function generateProject(
   const overlayChanges: OverlayChange[] = [];
   const shouldOverlay = destinationExists && (destinationIsCurrentDirectory || destinationHasEntries);
   try {
+    for (const warning of await removeNestedGitArtifacts(temporary)) {
+      options.onWarning?.(`${warning} The generated project may contain nested Git metadata.`);
+    }
     if (shouldOverlay) {
       await mkdir(backup);
       await overlayDirectory(temporary, options.config.destination, backup, overlayChanges);

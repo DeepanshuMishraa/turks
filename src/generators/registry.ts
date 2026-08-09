@@ -4,10 +4,10 @@ import { astroGenerator, electronGenerator, expoGenerator, nextGenerator, reactN
 import { beanieGenerator, bunGenerator, dieselGenerator, djangoOrmGenerator, drizzleGenerator, entGenerator, gormGenerator, kyselyGenerator, mongodbGenerator, mongooseGenerator, mysqlGenerator, postgresGenerator, prismaGenerator, pymongoGenerator, seaormGenerator, sqlalchemyGenerator, sqliteGenerator, sqlxGenerator, tortoiseGenerator, typeormGenerator } from "./data.js";
 import { dockerGenerator, githubActionsGenerator, moonGenerator } from "./integrations.js";
 import { readmeGenerator } from "./readme.js";
-import { cargoGenerator, gitGenerator, installGenerator, pnpmGenerator, rootGenerator } from "./root.js";
+import { cargoGenerator, gitGenerator, installGenerator, packageManagerGenerator, rootGenerator } from "./root.js";
 
 const generators: Readonly<Record<GeneratorId, Generator>> = {
-  root: rootGenerator, pnpm: pnpmGenerator,
+  root: rootGenerator, "package-manager": packageManagerGenerator,
   expo: expoGenerator, next: nextGenerator, "react-vite": reactViteGenerator, "vue-vite": vueViteGenerator,
   sveltekit: svelteKitGenerator, astro: astroGenerator, "react-native": reactNativeGenerator, tauri: tauriGenerator, electron: electronGenerator,
   rust: rustGenerator, axum: axumGenerator, "actix-web": actixWebGenerator, rocket: rocketGenerator,
