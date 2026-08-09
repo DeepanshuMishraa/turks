@@ -139,6 +139,9 @@ async function main(): Promise<void> {
     onProgress: ({ completed, total, label }) => {
       console.log(`${chalk.green("✓")} ${chalk.white(label)} ${chalk.dim(`(${completed}/${total})`)}`);
     },
+    onWarning: (warning) => {
+      console.warn(chalk.yellow(`Warning: ${warning}`));
+    },
   });
 
   if (!generation.ok) {

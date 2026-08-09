@@ -76,7 +76,7 @@ export const githubActionsGenerator: Generator = {
       await writeProjectFile(
         context,
         ".github/workflows/ci.yml",
-        `name: CI\n\non:\n  push:\n  pull_request:\n\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n${javascriptSetup}${languageSetup}      - run: ${packageManager} install\n      - run: ${PackageManager.runScript(packageManager, "build")}\n`,
+        `name: CI\n\non:\n  push:\n  pull_request:\n\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n${javascriptSetup}${languageSetup}      - run: ${PackageManager.ciInstallCommand(packageManager)}\n      - run: ${PackageManager.runScript(packageManager, "build")}\n`,
       );
       return Result.ok(undefined);
     } catch (error) {

@@ -5,7 +5,7 @@ describe("PackageManager", () => {
   it("uses each selected manager for package execution", () => {
     expect(PackageManager.executePackage("npm", "create-vite@latest", ["app"])).toEqual({
       executable: "npx",
-      args: ["create-vite@latest", "app"],
+      args: ["--yes", "create-vite@latest", "app"],
     });
     expect(PackageManager.executePackage("pnpm", "create-vite@latest", ["app"])).toEqual({
       executable: "pnpm",
@@ -15,6 +15,12 @@ describe("PackageManager", () => {
       executable: "bunx",
       args: ["create-vite@latest", "app"],
     });
+  });
+
+  it("uses reproducible CI installs when lockfiles support freezing", () => {
+    expect(PackageManager.ciInstallCommand("npm")).toBe("npm install");
+    expect(PackageManager.ciInstallCommand("pnpm")).toBe("pnpm install --frozen-lockfile");
+    expect(PackageManager.ciInstallCommand("bun")).toBe("bun install --frozen-lockfile");
   });
 
   it("uses manager-specific workspace commands", () => {

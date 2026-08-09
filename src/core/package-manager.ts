@@ -23,6 +23,10 @@ export const PackageManager = {
     return { executable: packageManager, args: ["install"] };
   },
 
+  ciInstallCommand(packageManager: PackageManager): string {
+    return packageManager === "npm" ? "npm install" : `${packageManager} install --frozen-lockfile`;
+  },
+
   runScript(packageManager: PackageManager, script: string): string {
     return `${packageManager} run ${script}`;
   },
@@ -39,7 +43,7 @@ export const PackageManager = {
 
   executePackage(packageManager: PackageManager, packageName: string, args: readonly string[]): Pick<Command, "executable" | "args"> {
     switch (packageManager) {
-      case "npm": return { executable: "npx", args: [packageName, ...args] };
+      case "npm": return { executable: "npx", args: ["--yes", packageName, ...args] };
       case "pnpm": return { executable: "pnpm", args: ["dlx", packageName, ...args] };
       case "bun": return { executable: "bunx", args: [packageName, ...args] };
     }

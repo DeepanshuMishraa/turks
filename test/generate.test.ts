@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import type { Command, CommandRunner } from "../src/core/command.js";
 import type { StackConfig } from "../src/core/config.js";
 import { generateProject } from "../src/core/generate.js";
 import { Planner } from "../src/core/planner.js";
+import type { GenerationPlan } from "../src/core/planner.js";
 import { Result, type Result as ResultValue } from "../src/core/result.js";
 import type { CommandError } from "../src/core/command.js";
 
@@ -17,13 +18,14 @@ class FakeCommandRunner implements CommandRunner {
     if (command.executable === "cargo" && command.args[0] === "new") {
       const api = path.join(command.cwd, "apps/api");
       await mkdir(path.join(api, "src"), { recursive: true });
-      await mkdir(path.join(api, ".git"));
+      await writeFile(path.join(api, ".git"), "gitdir: ../../../worktrees/api\n", "utf8");
       await writeFile(path.join(api, "Cargo.toml"), "[package]\nname = \"my-app-api\"\nversion = \"0.1.0\"\nedition = \"2024\"\n", "utf8");
       await writeFile(path.join(api, "src/main.rs"), "fn main() {}\n", "utf8");
     }
     if (command.args.includes("create-expo-app@latest")) {
       const mobile = path.join(command.cwd, "apps/mobile");
       await mkdir(mobile, { recursive: true });
+      await mkdir(path.join(mobile, ".git"));
       await writeFile(path.join(mobile, "package.json"), '{"name":"mobile"}\n', "utf8");
     }
     if (command.executable === "git" && command.args[0] === "init") {
@@ -79,9 +81,12 @@ describe("generateProject", () => {
     await expect(readFile(path.join(destination, "README.md"), "utf8")).resolves.toContain("Rust workspace: Cargo");
     await expect(readFile(path.join(destination, ".git/generated"), "utf8")).resolves.toContain("temporary git metadata");
     await expect(access(path.join(destination, "apps/api/.git"))).rejects.toThrow();
+    await expect(access(path.join(destination, "apps/mobile/.git"))).rejects.toThrow();
 
     expect(runner.commands.some((command) => command.args.includes("create-expo-app@latest"))).toBe(true);
-    expect(runner.commands.some((command) => command.executable === "cargo" && command.args.includes("--vcs") && command.args.includes("none"))).toBe(true);
+    const cargoNew = runner.commands.find((command) => command.executable === "cargo" && command.args[0] === "new");
+    expect(cargoNew).toBeDefined();
+    if (cargoNew !== undefined) expect(cargoNew.args[cargoNew.args.indexOf("--vcs") + 1]).toBe("none");
     expect(runner.commands.filter((command) => command.executable === "cargo" && command.args[0] === "add")).toHaveLength(3);
   });
 
@@ -116,6 +121,53 @@ describe("generateProject", () => {
     expect(result.ok).toBe(false);
     await expect(access(destination)).rejects.toThrow();
     expect(await readdir(parent)).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")("warns instead of discarding output when nested Git cleanup fails", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "turks-git-warning-"));
+    temporaryDirectories.push(parent);
+    const destination = path.join(parent, "my-app");
+    const config: StackConfig = {
+      projectName: "my-app",
+      destination,
+      clients: [],
+      backend: { kind: "typescript", framework: "none" },
+      database: { kind: "none" },
+      packageManager: "pnpm",
+      orchestrator: "none",
+      docker: false,
+      githubActions: false,
+      install: false,
+      initializeGit: false,
+    };
+    const plan: GenerationPlan = {
+      generators: [{
+        id: "root",
+        label: "Restricted nested Git fixture",
+        dependencies: [],
+        async generate(context) {
+          const restricted = path.join(context.rootDir, "restricted");
+          await mkdir(restricted);
+          await writeFile(path.join(restricted, ".git"), "gitdir: elsewhere\n", "utf8");
+          await chmod(restricted, 0o555);
+          return Result.ok(undefined);
+        },
+      }],
+    };
+    const warnings: string[] = [];
+
+    const result = await generateProject({
+      config,
+      plan,
+      runner: new FakeCommandRunner(),
+      onWarning(warning) { warnings.push(warning); },
+    });
+    await chmod(path.join(destination, "restricted"), 0o755);
+
+    expect(result).toEqual({ ok: true, value: destination });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("may contain nested Git metadata");
+    await expect(readFile(path.join(destination, "restricted/.git"), "utf8")).resolves.toContain("gitdir");
   });
 
   it("merges into an existing directory only when explicitly allowed", async () => {

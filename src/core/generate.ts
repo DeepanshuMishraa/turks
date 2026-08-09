@@ -19,6 +19,7 @@ export type GenerateOptions = {
   readonly runner: CommandRunner;
   readonly mergeIntoExisting?: boolean;
   readonly onProgress?: (progress: Progress) => void;
+  readonly onWarning?: (warning: string) => void;
 };
 
 type OverlayChange =
@@ -117,23 +118,36 @@ async function rollbackOverlay(changes: readonly OverlayChange[]): Promise<reado
   return errors;
 }
 
-async function removeNestedGitDirectories(root: string, relativeDirectory = ""): Promise<void> {
+async function removeNestedGitArtifacts(root: string, relativeDirectory = ""): Promise<readonly string[]> {
   const directory = path.join(root, relativeDirectory);
-  for (const entry of await readdir(directory)) {
+  let entries: readonly string[];
+  try {
+    entries = await readdir(directory);
+  } catch (error) {
+    return [`Could not inspect '${relativeDirectory || "."}' for nested Git metadata: ${errorDetail(error)}`];
+  }
+
+  const warnings: string[] = [];
+  for (const entry of entries) {
     const relativePath = path.join(relativeDirectory, entry);
     const entryPath = path.join(root, relativePath);
-    const stats = await lstat(entryPath);
-    if (!stats.isDirectory()) continue;
-    if (entry === "node_modules") continue;
     if (entry === ".git") {
       if (relativeDirectory !== "") {
         const cleanupError = await cleanup(entryPath);
-        if (cleanupError !== undefined) throw new Error(`Could not remove nested Git metadata: ${cleanupError}`);
+        if (cleanupError !== undefined) warnings.push(`Could not remove nested Git metadata at '${relativePath}': ${cleanupError}`);
       }
       continue;
     }
-    await removeNestedGitDirectories(root, relativePath);
+    if (entry === "node_modules") continue;
+    try {
+      if ((await lstat(entryPath)).isDirectory()) {
+        warnings.push(...await removeNestedGitArtifacts(root, relativePath));
+      }
+    } catch (error) {
+      warnings.push(`Could not inspect '${relativePath}' for nested Git metadata: ${errorDetail(error)}`);
+    }
   }
+  return warnings;
 }
 
 export async function generateProject(
@@ -208,16 +222,8 @@ export async function generateProject(
     }
   }
 
-  try {
-    await removeNestedGitDirectories(temporary);
-  } catch (error) {
-    const cleanupError = await cleanup(temporary);
-    const cleanupDetail = cleanupError === undefined ? "" : ` Cleanup also failed: ${cleanupError}`;
-    return failed(
-      `Could not enforce root-only Git initialization: ${errorDetail(error)}${cleanupDetail}`,
-      "Check file permissions, then rerun turks. The incomplete project was not kept.",
-      "git",
-    );
+  for (const warning of await removeNestedGitArtifacts(temporary)) {
+    options.onWarning?.(`${warning} The generated project may contain nested Git metadata.`);
   }
 
   const destinationIsCurrentDirectory = path.resolve(options.config.destination) === path.resolve(process.cwd());

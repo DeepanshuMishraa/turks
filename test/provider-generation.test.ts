@@ -8,7 +8,7 @@ import { StackConfig as StackConfigModule } from "../src/core/config.js";
 import { generateProject } from "../src/core/generate.js";
 import { Planner } from "../src/core/planner.js";
 import { Result, type Result as ResultValue } from "../src/core/result.js";
-import type { PackageManager } from "../src/core/package-manager.js";
+import { PackageManager, type PackageManager as PackageManagerValue } from "../src/core/package-manager.js";
 import { DATA_LAYERS, DATA_LAYER_SUPPORT, type DataLayerKind } from "../src/core/support.js";
 
 class MatrixCommandRunner implements CommandRunner {
@@ -65,8 +65,9 @@ async function generate(
   database: StackConfig["database"],
   clients: readonly ClientSelection[] = [],
   runner: CommandRunner = new MatrixCommandRunner(),
-  packageManager: PackageManager = "pnpm",
+  packageManager: PackageManagerValue = "pnpm",
   install = false,
+  githubActions = false,
 ): Promise<boolean> {
   const candidate: StackConfig = {
     projectName: name,
@@ -77,7 +78,7 @@ async function generate(
     packageManager,
     orchestrator: "none",
     docker: false,
-    githubActions: false,
+    githubActions,
     install,
     initializeGit: false,
   };
@@ -93,19 +94,20 @@ describe("provider generation", () => {
     for (const packageManager of ["npm", "pnpm", "bun"] as const) {
       const runner = new MatrixCommandRunner();
       const name = `typescript-${packageManager}`;
-      expect(await generate(name, { kind: "typescript", framework: "hono" }, { kind: "none" }, [], runner, packageManager, true)).toBe(true);
+      expect(await generate(name, { kind: "typescript", framework: "hono" }, { kind: "none" }, [], runner, packageManager, true, true)).toBe(true);
 
       const rootPackage = await readFile(path.join(parent, name, "package.json"), "utf8");
       expect(rootPackage).toContain(`"packageManager": "${packageManager}@`);
       expect(rootPackage).toContain('"workspaces": [');
       expect(runner.commands.some((command) => command.executable === packageManager && command.args.length === 1 && command.args[0] === "install")).toBe(true);
-      const workspaceFile = access(path.join(parent, name, "pnpm-workspace.yaml"));
       if (packageManager === "pnpm") {
         await expect(readFile(path.join(parent, name, "pnpm-workspace.yaml"), "utf8")).resolves.toContain("'esbuild': true");
       } else {
-        await expect(workspaceFile).rejects.toThrow();
+        await expect(access(path.join(parent, name, "pnpm-workspace.yaml"))).rejects.toThrow();
       }
       if (packageManager === "bun") expect(rootPackage).toContain('"trustedDependencies"');
+      const workflow = await readFile(path.join(parent, name, ".github/workflows/ci.yml"), "utf8");
+      expect(workflow).toContain(PackageManager.ciInstallCommand(packageManager));
     }
 
     expect(await generate("typescript-no-install", { kind: "typescript", framework: "hono" }, { kind: "none" }, [], new MatrixCommandRunner(), "npm", false)).toBe(true);
