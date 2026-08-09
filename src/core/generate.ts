@@ -222,14 +222,13 @@ export async function generateProject(
     }
   }
 
-  for (const warning of await removeNestedGitArtifacts(temporary)) {
-    options.onWarning?.(`${warning} The generated project may contain nested Git metadata.`);
-  }
-
   const destinationIsCurrentDirectory = path.resolve(options.config.destination) === path.resolve(process.cwd());
   const overlayChanges: OverlayChange[] = [];
   const shouldOverlay = destinationExists && (destinationIsCurrentDirectory || destinationHasEntries);
   try {
+    for (const warning of await removeNestedGitArtifacts(temporary)) {
+      options.onWarning?.(`${warning} The generated project may contain nested Git metadata.`);
+    }
     if (shouldOverlay) {
       await mkdir(backup);
       await overlayDirectory(temporary, options.config.destination, backup, overlayChanges);

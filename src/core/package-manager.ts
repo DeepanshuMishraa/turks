@@ -23,8 +23,10 @@ export const PackageManager = {
     return { executable: packageManager, args: ["install"] };
   },
 
-  ciInstallCommand(packageManager: PackageManager): string {
-    return packageManager === "npm" ? "npm install" : `${packageManager} install --frozen-lockfile`;
+  ciInstallCommand(packageManager: PackageManager, hasLockfile: boolean): string {
+    return packageManager === "npm" || !hasLockfile
+      ? `${packageManager} install`
+      : `${packageManager} install --frozen-lockfile`;
   },
 
   runScript(packageManager: PackageManager, script: string): string {

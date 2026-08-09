@@ -123,7 +123,7 @@ describe("generateProject", () => {
     expect(await readdir(parent)).toEqual([]);
   });
 
-  it.skipIf(process.platform === "win32")("warns instead of discarding output when nested Git cleanup fails", async () => {
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("warns instead of discarding output when nested Git cleanup fails", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "turks-git-warning-"));
     temporaryDirectories.push(parent);
     const destination = path.join(parent, "my-app");
@@ -168,6 +168,20 @@ describe("generateProject", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("may contain nested Git metadata");
     await expect(readFile(path.join(destination, "restricted/.git"), "utf8")).resolves.toContain("gitdir");
+
+    const callbackConfig = { ...config, projectName: "callback-app", destination: path.join(parent, "callback-app") };
+    const callbackResult = await generateProject({
+      config: callbackConfig,
+      plan,
+      runner: new FakeCommandRunner(),
+      onWarning() { throw new Error("warning callback failed"); },
+    });
+    for (const entry of await readdir(parent)) {
+      if (entry.startsWith(".callback-app.turks-")) await chmod(path.join(parent, entry, "restricted"), 0o755);
+    }
+
+    expect(callbackResult.ok).toBe(false);
+    if (!callbackResult.ok) expect(callbackResult.error.message).toContain("warning callback failed");
   });
 
   it("merges into an existing directory only when explicitly allowed", async () => {

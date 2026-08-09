@@ -107,11 +107,19 @@ describe("provider generation", () => {
       }
       if (packageManager === "bun") expect(rootPackage).toContain('"trustedDependencies"');
       const workflow = await readFile(path.join(parent, name, ".github/workflows/ci.yml"), "utf8");
-      expect(workflow).toContain(PackageManager.ciInstallCommand(packageManager));
+      expect(workflow).toContain(PackageManager.ciInstallCommand(packageManager, true));
     }
 
     expect(await generate("typescript-no-install", { kind: "typescript", framework: "hono" }, { kind: "none" }, [], new MatrixCommandRunner(), "npm", false)).toBe(true);
     await expect(readFile(path.join(parent, "typescript-no-install/README.md"), "utf8")).resolves.toContain("npm install");
+
+    for (const packageManager of ["pnpm", "bun"] as const) {
+      const name = `ci-without-lockfile-${packageManager}`;
+      expect(await generate(name, { kind: "typescript", framework: "hono" }, { kind: "none" }, [], new MatrixCommandRunner(), packageManager, false, true)).toBe(true);
+      const workflow = await readFile(path.join(parent, name, ".github/workflows/ci.yml"), "utf8");
+      expect(workflow).toContain(PackageManager.ciInstallCommand(packageManager, false));
+      expect(workflow).not.toContain("--frozen-lockfile");
+    }
   });
 
   it("scaffolds clients with the selected package manager", async () => {

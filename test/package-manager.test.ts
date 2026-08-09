@@ -18,9 +18,11 @@ describe("PackageManager", () => {
   });
 
   it("uses reproducible CI installs when lockfiles support freezing", () => {
-    expect(PackageManager.ciInstallCommand("npm")).toBe("npm install");
-    expect(PackageManager.ciInstallCommand("pnpm")).toBe("pnpm install --frozen-lockfile");
-    expect(PackageManager.ciInstallCommand("bun")).toBe("bun install --frozen-lockfile");
+    expect(PackageManager.ciInstallCommand("npm", true)).toBe("npm install");
+    expect(PackageManager.ciInstallCommand("pnpm", true)).toBe("pnpm install --frozen-lockfile");
+    expect(PackageManager.ciInstallCommand("bun", true)).toBe("bun install --frozen-lockfile");
+    expect(PackageManager.ciInstallCommand("pnpm", false)).toBe("pnpm install");
+    expect(PackageManager.ciInstallCommand("bun", false)).toBe("bun install");
   });
 
   it("uses manager-specific workspace commands", () => {
