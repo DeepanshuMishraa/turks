@@ -174,7 +174,14 @@ function projectNameForCurrentDirectory(cwd: string): string {
 }
 
 async function promptProjectName(): Promise<ResultValue<string, InputError>> {
-  const value = await p.text({ message: "Project name?", placeholder: "my-app or .", defaultValue: "my-app", validate: (name) => name === "." || /^[a-z0-9][a-z0-9._-]*$/.test(name) ? undefined : "Use '.', or lowercase letters, numbers, dots, hyphens, and underscores." });
+  const value = await p.text({
+    message: "Project name?",
+    placeholder: "my-app or .",
+    defaultValue: "my-app",
+    validate: (name) => name !== undefined && (name === "." || /^[a-z0-9][a-z0-9._-]*$/.test(name))
+      ? undefined
+      : "Use '.', or lowercase letters, numbers, dots, hyphens, and underscores.",
+  });
   return p.isCancel(value) ? cancelled() : Result.ok(value);
 }
 
