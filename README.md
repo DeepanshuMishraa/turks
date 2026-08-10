@@ -31,9 +31,15 @@ npx create-turks@latest my-app \
   --yes
 ```
 
+Or scaffold a complete starter template as the whole project:
+
+```bash
+npx create-turks@latest my-app --template gpui-starter --yes
+```
+
 Use `--client none`, `--backend none`, `--database none`, or `--data-layer none` to omit a layer. Use `--dry-run` to inspect the exact generation plan without writing files.
 
-Interactive runs ask which package manager to use, whether to install dependencies, and whether to initialize a Git repository. Use `--package-manager npm|pnpm|bun`, `--no-install`, and `--no-git` in automated runs.
+Interactive runs ask whether to start from a starter template, which client, backend, database, and data layer to compose, which package manager to use, whether to install dependencies, and whether to initialize a Git repository. Choosing a template skips the stack questions because the template defines the whole project. Use `--template none|gpui-starter`, `--package-manager npm|pnpm|bun`, `--no-install`, and `--no-git` in automated runs.
 
 When the destination already contains files, Turks asks before merging the generated project and overwriting conflicting paths. Use `--force` for deliberate non-interactive merging.
 
@@ -42,6 +48,7 @@ When the destination already contains files, Turks asks before merging the gener
 | Category | Choices |
 | --- | --- |
 | Clients | Expo, Next.js, React + Vite, Vue + Vite, SvelteKit, Astro, React Native, Tauri, Electron, or none |
+| Templates | GPUI desktop app (gpui-starter), or none |
 | Rust | Axum, Actix Web, Rocket, or no framework |
 | Go | standard library, Chi, Gin, Fiber, Echo, or no framework |
 | TypeScript | Hono, Express, Fastify, Nest, or no framework |
@@ -67,6 +74,17 @@ npx create-turks@latest my-app --client next,expo,tauri --backend go --framework
 Moon is not required to build or use Turks. npm, pnpm, Bun, Cargo, Go, and uv already provide the native workspace and build tools the generated repository needs.
 
 Moon is an optional advanced output for teams that want a shared task graph and caching layer. It defaults to `none`; enable it with `--orchestrator moon` or `--moon`.
+
+## Templates
+
+Templates are vendored starters that become the whole generated project. Selecting `gpui-starter` scaffolds the [GPUI starter](https://github.com/lassejlv/gpui-starter) desktop app verbatim — same file layout — with crate names, identifiers, titles, and the window bundle id rewritten to match your project name. Run it with:
+
+```bash
+cd my-app
+cargo run -p my-app-desktop
+```
+
+Turks asks whether to build the template (`cargo build`) right after scaffolding. Docker Compose and GitHub Actions are stack options and are not available with a template.
 
 ## Development
 

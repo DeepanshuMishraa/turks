@@ -72,6 +72,7 @@ async function generate(
   const candidate: StackConfig = {
     projectName: name,
     destination: path.join(parent, name),
+    template: "none",
     clients,
     backend,
     database,

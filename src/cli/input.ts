@@ -4,7 +4,7 @@ import type { BackendSelection, ClientSelection, ConfigIssue, DatabaseSelection,
 import { StackConfig as StackConfigModule } from "../core/config.js";
 import { Result, type Result as ResultValue } from "../core/result.js";
 import { PackageManager, type PackageManager as PackageManagerValue } from "../core/package-manager.js";
-import { BACKEND_FRAMEWORKS, CLIENTS, DATA_LAYERS, DATA_LAYER_SUPPORT, DATABASES, SUPPORT_LABELS, type BackendLanguage, type ClientKind, type DataLayerKind, type DatabaseKind } from "../core/support.js";
+import { BACKEND_FRAMEWORKS, CLIENTS, DATA_LAYERS, DATA_LAYER_SUPPORT, DATABASES, SUPPORT_LABELS, TEMPLATES, type BackendLanguage, type ClientKind, type DataLayerKind, type DatabaseKind, type TemplateKind } from "../core/support.js";
 
 export type CliOptions = {
   readonly client?: string;
@@ -18,6 +18,7 @@ export type CliOptions = {
   readonly database?: string;
   readonly dataLayer?: string;
   readonly dbClient?: string;
+  readonly template?: string;
   readonly orchestrator?: string;
   readonly packageManager?: string;
   readonly preset?: string;
@@ -35,6 +36,7 @@ export type InputError = { readonly message: string; readonly recovery: string }
 
 type ResolvedInput = {
   readonly projectName?: string;
+  readonly template?: TemplateKind;
   readonly clients?: readonly ClientSelection[];
   readonly backend?: BackendSelection;
   readonly database?: DatabaseSelection;
@@ -128,6 +130,13 @@ function parsePackageManager(value: string): ResultValue<PackageManagerValue, In
   switch (value) {
     case "npm": case "pnpm": case "bun": return Result.ok(value);
     default: return invalid("package manager", value, PackageManager.values);
+  }
+}
+
+function parseTemplateKind(value: string): ResultValue<TemplateKind, InputError> {
+  switch (value) {
+    case "none": case "gpui-starter": return Result.ok(value);
+    default: return invalid("template", value, TEMPLATES);
   }
 }
 
@@ -235,6 +244,19 @@ async function promptOrchestrator(): Promise<ResultValue<"none" | "moon", InputE
   return p.isCancel(value) ? cancelled() : Result.ok(value);
 }
 
+async function promptTemplate(): Promise<ResultValue<TemplateKind, InputError>> {
+  const value = await p.select<TemplateKind>({
+    message: "Starter template?",
+    initialValue: "none",
+    options: TEMPLATES.map((template) => ({
+      value: template,
+      label: SUPPORT_LABELS.templates[template],
+      hint: template === "none" ? "build the stack from parts" : "scaffold a complete project",
+    })),
+  });
+  return p.isCancel(value) ? cancelled() : Result.ok(value);
+}
+
 async function promptPackageManager(): Promise<ResultValue<PackageManagerValue, InputError>> {
   const value = await p.select<PackageManagerValue>({
     message: "Package manager?",
@@ -260,6 +282,11 @@ function optionInput(projectName: string | undefined, options: CliOptions): Resu
     const clients = parseClients(clientValue);
     if (!clients.ok) return clients;
     input = { ...input, clients: clients.value };
+  }
+  if (options.template !== undefined) {
+    const template = parseTemplateKind(options.template);
+    if (!template.ok) return template;
+    input = { ...input, template: template.value };
   }
   if (options.backend !== undefined) {
     const backend = parseBackend(options.backend, frameworkOption(options, options.backend));
@@ -313,21 +340,74 @@ export async function resolveInput(cwd: string, projectName: string | undefined,
   const target = input.projectName !== undefined ? Result.ok(input.projectName) : defaults ? Result.ok("my-app") : await promptProjectName();
   if (!target.ok) return target;
   const name = target.value === "." ? projectNameForCurrentDirectory(cwd) : target.value;
-  const clients = input.clients !== undefined ? Result.ok(input.clients) : defaults ? Result.ok([{ kind: "expo" }] as const) : await promptClients();
+
+  const template = input.template !== undefined ? Result.ok(input.template) : defaults ? Result.ok("none" as const) : await promptTemplate();
+  if (!template.ok) return template;
+  const usesTemplate = template.value !== "none";
+
+  const clients = usesTemplate
+    ? Result.ok([] as readonly ClientSelection[])
+    : input.clients !== undefined
+      ? Result.ok(input.clients)
+      : defaults
+        ? Result.ok([{ kind: "expo" }] as const)
+        : await promptClients();
   if (!clients.ok) return clients;
-  const backend = input.backend !== undefined ? Result.ok(input.backend) : defaults ? Result.ok({ kind: "rust", framework: "axum" } as const) : await promptBackend();
+  const backend = usesTemplate
+    ? Result.ok({ kind: "none" } as const)
+    : input.backend !== undefined
+      ? Result.ok(input.backend)
+      : defaults
+        ? Result.ok({ kind: "rust", framework: "axum" } as const)
+        : await promptBackend();
   if (!backend.ok) return backend;
-  const packageManager = input.packageManager !== undefined ? Result.ok(input.packageManager) : defaults ? Result.ok("pnpm" as const) : await promptPackageManager();
+  const packageManager = usesTemplate
+    ? Result.ok(input.packageManager ?? ("pnpm" as const))
+    : input.packageManager !== undefined
+      ? Result.ok(input.packageManager)
+      : defaults
+        ? Result.ok("pnpm" as const)
+        : await promptPackageManager();
   if (!packageManager.ok) return packageManager;
-  const database = input.database !== undefined ? Result.ok(input.database) : defaults ? Result.ok({ kind: "postgres", dataLayer: "sqlx" } as const) : await promptDatabase(backend.value);
+  const database = usesTemplate
+    ? Result.ok({ kind: "none" } as const)
+    : input.database !== undefined
+      ? Result.ok(input.database)
+      : defaults
+        ? Result.ok({ kind: "postgres", dataLayer: "sqlx" } as const)
+        : await promptDatabase(backend.value);
   if (!database.ok) return database;
-  const orchestrator = input.orchestrator !== undefined ? Result.ok(input.orchestrator) : defaults ? Result.ok("none" as const) : await promptOrchestrator();
+  const orchestrator = usesTemplate
+    ? Result.ok("none" as const)
+    : input.orchestrator !== undefined
+      ? Result.ok(input.orchestrator)
+      : defaults
+        ? Result.ok("none" as const)
+        : await promptOrchestrator();
   if (!orchestrator.ok) return orchestrator;
-  const docker = input.docker !== undefined ? Result.ok(input.docker) : database.value.kind === "none" || database.value.kind === "sqlite" || defaults ? Result.ok(false) : await promptBoolean("Add Docker Compose for the database?", false);
+  const docker = usesTemplate
+    ? Result.ok(input.docker ?? false)
+    : input.docker !== undefined
+      ? Result.ok(input.docker)
+      : database.value.kind === "none" || database.value.kind === "sqlite" || defaults
+        ? Result.ok(false)
+        : await promptBoolean("Add Docker Compose for the database?", false);
   if (!docker.ok) return docker;
-  const ci = input.githubActions !== undefined ? Result.ok(input.githubActions) : defaults ? Result.ok(false) : await promptBoolean("Add GitHub Actions?", true);
+  const ci = input.githubActions !== undefined
+    ? Result.ok(input.githubActions)
+    : usesTemplate || defaults
+      ? Result.ok(false)
+      : await promptBoolean("Add GitHub Actions?", true);
   if (!ci.ok) return ci;
-  const install = options.install !== undefined ? Result.ok(options.install) : defaults ? Result.ok(true) : await promptBoolean(`Install dependencies with ${packageManager.value}?`, true);
+  const install = options.install !== undefined
+    ? Result.ok(options.install)
+    : usesTemplate
+      ? defaults
+        ? Result.ok(false)
+        : await promptBoolean("Build the template with cargo now?", true)
+      : defaults
+        ? Result.ok(true)
+        : await promptBoolean(`Install dependencies with ${packageManager.value}?`, true);
   if (!install.ok) return install;
   const git = options.git !== undefined ? Result.ok(options.git) : defaults ? Result.ok(true) : await promptBoolean("Initialize a Git repository?", true);
   if (!git.ok) return git;
@@ -335,6 +415,7 @@ export async function resolveInput(cwd: string, projectName: string | undefined,
   return StackConfigModule.create({
     projectName: name,
     destination: path.resolve(StackConfigModule.destination(cwd, target.value)),
+    template: template.value,
     clients: clients.value,
     backend: backend.value,
     database: database.value,

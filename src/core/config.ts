@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Result, type Result as ResultValue } from "./result.js";
-import { DATA_LAYER_SUPPORT, type DataLayerKind, type DatabaseKind, type GoFramework, type PythonFramework, type RustFramework, type TypeScriptFramework } from "./support.js";
+import { DATA_LAYER_SUPPORT, type DataLayerKind, type DatabaseKind, type GoFramework, type PythonFramework, type RustFramework, type TypeScriptFramework, type TemplateKind } from "./support.js";
 import type { PackageManager } from "./package-manager.js";
 
 export type ClientSelection =
@@ -31,6 +31,7 @@ export type DatabaseSelection =
 export type StackConfig = {
   readonly projectName: string;
   readonly destination: string;
+  readonly template: TemplateKind;
   readonly clients: readonly ClientSelection[];
   readonly backend: BackendSelection;
   readonly database: DatabaseSelection;
@@ -48,7 +49,8 @@ export type ConfigIssue = {
     | "empty-stack"
     | "data-layer-requires-backend"
     | "incompatible-data-layer"
-    | "docker-database-unsupported";
+    | "docker-database-unsupported"
+    | "template-unsupported-option";
   readonly message: string;
   readonly recovery: string;
 };
@@ -67,11 +69,20 @@ export const StackConfig = {
       });
     }
 
-    if (input.clients.length === 0 && input.backend.kind === "none") {
+    if (input.template === "none" && input.clients.length === 0 && input.backend.kind === "none") {
       issues.push({
         code: "empty-stack",
         message: "The selected stack has no client or backend.",
         recovery: "Select at least one client or backend.",
+      });
+    }
+
+    if (input.template !== "none" && (input.docker || input.githubActions)) {
+      const unsupported = input.docker && input.githubActions ? "Docker Compose and GitHub Actions" : input.docker ? "Docker Compose" : "GitHub Actions";
+      issues.push({
+        code: "template-unsupported-option",
+        message: `${unsupported} is not supported with the '${input.template}' template.`,
+        recovery: "Choose no template for the stack flow, or remove the unsupported option.",
       });
     }
 

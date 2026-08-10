@@ -10,6 +10,7 @@ export function formatPlan(config: StackConfig, plan: GenerationPlan): string {
     `  Clients: ${config.clients.length === 0 ? "none" : config.clients.map((client) => client.kind).join(", ")}`,
     `  Backend: ${config.backend.kind === "none" ? "none" : `${config.backend.kind} + ${config.backend.framework}`}`,
     `  Database: ${config.database.kind === "none" ? "none" : `${config.database.kind} + ${config.database.dataLayer}`}`,
+    `  Template: ${config.template === "none" ? "none" : config.template}`,
     `  Package manager: ${config.packageManager}`,
     `  Install dependencies: ${config.install ? "yes" : "no"}`,
     `  Workspace orchestrator: ${config.orchestrator}`,

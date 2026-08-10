@@ -8,6 +8,7 @@ import { ProcessCommandRunner } from "./core/command.js";
 import { formatPlan } from "./core/format-plan.js";
 import { generateProject } from "./core/generate.js";
 import { Planner } from "./core/planner.js";
+import { Templates } from "./generators/template.js";
 import { resolveInput, type CliOptions, type InputError } from "./cli/input.js";
 import type { ConfigIssue } from "./core/config.js";
 
@@ -35,6 +36,7 @@ const program = new Command()
   .option("--database <database>", "database: none, postgres, mysql, sqlite, or mongodb")
   .option("--data-layer <library>", "compatible ORM, query builder, driver, or none")
   .option("--db-client <library>", "alias for --data-layer")
+  .option("--template <template>", "starter template: none (default) or gpui-starter")
   .option("--package-manager <manager>", "package manager: npm, pnpm, or bun")
   .option("--orchestrator <orchestrator>", "workspace orchestrator: none (default) or moon")
   .option("--preset <preset>", "preset: expo-rust, expo-rust-postgres, or next-go")
@@ -153,11 +155,17 @@ async function main(): Promise<void> {
   }
 
   const packageManager = configResult.value.packageManager;
-  const nextSteps = [
-    ...(configResult.value.destination === process.cwd() ? [] : [`cd ${configResult.value.projectName}`]),
-    ...(configResult.value.install ? [] : [`${packageManager} install`]),
-    [`${packageManager} run dev`],
-  ];
+  const nextSteps = configResult.value.template === "none"
+    ? [
+        ...(configResult.value.destination === process.cwd() ? [] : [`cd ${configResult.value.projectName}`]),
+        ...(configResult.value.install ? [] : [`${packageManager} install`]),
+        [`${packageManager} run dev`],
+      ]
+    : [
+        ...(configResult.value.destination === process.cwd() ? [] : [`cd ${configResult.value.projectName}`]),
+        ...(configResult.value.install ? [] : [Templates.build(configResult.value) ?? "cargo build"]),
+        Templates.run(configResult.value) ?? "cargo run",
+      ];
   const nextCommand = nextSteps.join("\n  ");
   p.outro(`${chalk.green.bold("Done.")}\n\n  ${chalk.cyan(nextCommand)}`);
 }

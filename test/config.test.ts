@@ -8,6 +8,7 @@ function referenceConfig(): StackConfigValue {
   return {
     projectName: "my-app",
     destination: "/tmp/my-app",
+    template: "none",
     clients: [{ kind: "expo" }],
     backend: { kind: "rust", framework: "axum" },
     database: { kind: "postgres", dataLayer: "sqlx" },
@@ -169,6 +170,66 @@ describe("StackConfig", () => {
     if (!result.ok) return;
     expect(result.value.database).toEqual({ kind: "none" });
   });
+
+  it("selects a template and drops the stack questions", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      template: "gpui-starter",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.template).toBe("gpui-starter");
+    expect(result.value.clients).toEqual([]);
+    expect(result.value.backend).toEqual({ kind: "none" });
+    expect(result.value.database).toEqual({ kind: "none" });
+    expect(result.value.docker).toBe(false);
+    expect(result.value.githubActions).toBe(false);
+    expect(result.value.orchestrator).toBe("none");
+  });
+
+  it("defaults to no template when --yes is used without one", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.template).toBe("none");
+    expect(result.value.clients).toEqual([{ kind: "expo" }]);
+  });
+
+  it("rejects stack-only options combined with a template", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      template: "gpui-starter",
+      docker: true,
+      ci: "github",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok || "message" in result.error) return;
+    expect(result.error.map((issue) => issue.code)).toContain("template-unsupported-option");
+  });
+
+  it("rejects unknown templates", async () => {
+    const result = await resolveInput("/tmp", "my-app", {
+      template: "blazor",
+      install: false,
+      git: false,
+      yes: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok || !("message" in result.error)) return;
+    expect(result.error.message).toContain("Invalid template");
+  });
 });
 
 describe("Planner", () => {
@@ -198,5 +259,41 @@ describe("Planner", () => {
     const gitIndex = ids.indexOf("git");
     expect(installIndex).toBeGreaterThan(ids.indexOf("sqlx"));
     expect(gitIndex).toBeGreaterThan(installIndex);
+  });
+
+  it("plans a template as a self-contained scaffold", () => {
+    const plan = Planner.create({
+      ...referenceConfig(),
+      template: "gpui-starter",
+      clients: [],
+      backend: { kind: "none" },
+      database: { kind: "none" },
+      docker: false,
+      githubActions: false,
+      install: true,
+      initializeGit: true,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    expect(plan.value.generators.map((generator) => generator.id)).toEqual(["template", "template-install", "git"]);
+  });
+
+  it("plans only the template when build and Git are skipped", () => {
+    const plan = Planner.create({
+      ...referenceConfig(),
+      template: "gpui-starter",
+      clients: [],
+      backend: { kind: "none" },
+      database: { kind: "none" },
+      docker: false,
+      githubActions: false,
+      install: false,
+      initializeGit: false,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    expect(plan.value.generators.map((generator) => generator.id)).toEqual(["template"]);
   });
 });

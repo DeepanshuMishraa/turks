@@ -52,6 +52,7 @@ describe("generateProject", () => {
     const config: StackConfig = {
       projectName: "my-app",
       destination,
+      template: "none",
       clients: [{ kind: "expo" }],
       backend: { kind: "rust", framework: "axum" },
       database: { kind: "postgres", dataLayer: "sqlx" },
@@ -97,6 +98,7 @@ describe("generateProject", () => {
     const config: StackConfig = {
       projectName: "my-app",
       destination,
+      template: "none",
       clients: [{ kind: "expo" }],
       backend: { kind: "none" },
       database: { kind: "none" },
@@ -130,6 +132,7 @@ describe("generateProject", () => {
     const config: StackConfig = {
       projectName: "my-app",
       destination,
+      template: "none",
       clients: [],
       backend: { kind: "typescript", framework: "none" },
       database: { kind: "none" },
@@ -197,6 +200,7 @@ describe("generateProject", () => {
     const config: StackConfig = {
       projectName: "existing-app",
       destination,
+      template: "none",
       clients: [],
       backend: { kind: "typescript", framework: "hono" },
       database: { kind: "none" },

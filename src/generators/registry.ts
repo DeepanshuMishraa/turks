@@ -5,6 +5,7 @@ import { beanieGenerator, bunGenerator, dieselGenerator, djangoOrmGenerator, dri
 import { dockerGenerator, githubActionsGenerator, moonGenerator } from "./integrations.js";
 import { readmeGenerator } from "./readme.js";
 import { cargoGenerator, gitGenerator, installGenerator, packageManagerGenerator, rootGenerator } from "./root.js";
+import { templateGenerator, templateInstallGenerator } from "./template.js";
 
 const generators: Readonly<Record<GeneratorId, Generator>> = {
   root: rootGenerator, "package-manager": packageManagerGenerator,
@@ -21,7 +22,7 @@ const generators: Readonly<Record<GeneratorId, Generator>> = {
   drizzle: drizzleGenerator, prisma: prismaGenerator, typeorm: typeormGenerator, kysely: kyselyGenerator, mongoose: mongooseGenerator,
   sqlalchemy: sqlalchemyGenerator, "django-orm": djangoOrmGenerator, tortoise: tortoiseGenerator, pymongo: pymongoGenerator, beanie: beanieGenerator,
   moon: moonGenerator, docker: dockerGenerator, "github-actions": githubActionsGenerator,
-  readme: readmeGenerator, install: installGenerator, git: gitGenerator,
+  readme: readmeGenerator, template: templateGenerator, "template-install": templateInstallGenerator, install: installGenerator, git: gitGenerator,
 };
 
 export const GeneratorRegistry = {

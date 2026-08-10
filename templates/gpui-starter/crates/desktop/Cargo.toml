@@ -1,0 +1,13 @@
+[package]
+name = "gpui-starter-desktop"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "gpui-starter"
+path = "src/main.rs"
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-starter-ui.workspace = true

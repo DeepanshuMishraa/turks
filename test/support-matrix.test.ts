@@ -43,6 +43,7 @@ function config(backend: BackendSelection, database: DatabaseSelection): StackCo
   return {
     projectName: "matrix-app",
     destination: "/tmp/matrix-app",
+    template: "none",
     clients: backend.kind === "none" ? [{ kind: "expo" }] : [],
     backend,
     database,

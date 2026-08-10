@@ -1,6 +1,9 @@
 export const CLIENTS = ["expo", "next", "react-vite", "vue-vite", "sveltekit", "astro", "react-native", "tauri", "electron"] as const;
 export type ClientKind = (typeof CLIENTS)[number];
 
+export const TEMPLATES = ["none", "gpui-starter"] as const;
+export type TemplateKind = (typeof TEMPLATES)[number];
+
 export const BACKEND_FRAMEWORKS = {
   rust: ["none", "axum", "actix-web", "rocket"],
   go: ["none", "stdlib", "chi", "gin", "fiber", "echo"],
@@ -88,4 +91,5 @@ export const SUPPORT_LABELS = {
     litestar: "Litestar",
   },
   databases: { none: "None", postgres: "PostgreSQL", mysql: "MySQL", sqlite: "SQLite", mongodb: "MongoDB" },
+  templates: { none: "No template", "gpui-starter": "GPUI desktop app" },
 } as const;

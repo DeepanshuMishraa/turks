@@ -58,6 +58,8 @@ export type GeneratorId =
   | "docker"
   | "github-actions"
   | "readme"
+  | "template"
+  | "template-install"
   | "install"
   | "git";
 

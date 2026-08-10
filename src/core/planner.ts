@@ -2,10 +2,19 @@ import type { StackConfig } from "./config.js";
 import type { GenerationError, Generator, GeneratorId } from "./generator.js";
 import { Result, type Result as ResultValue } from "./result.js";
 import { GeneratorRegistry } from "../generators/registry.js";
+import { gitGenerator } from "../generators/root.js";
+import { templateGenerator, templateInstallGenerator } from "../generators/template.js";
 
 export type GenerationPlan = {
   readonly generators: readonly Generator[];
 };
+
+function templateGenerators(config: StackConfig): readonly Generator[] {
+  const generators: Generator[] = [templateGenerator];
+  if (config.install) generators.push(templateInstallGenerator);
+  if (config.initializeGit) generators.push(gitGenerator);
+  return generators;
+}
 
 function selectedGeneratorIds(config: StackConfig): readonly GeneratorId[] {
   const ids: GeneratorId[] = ["root", "package-manager"];
@@ -52,6 +61,10 @@ function selectedGeneratorIds(config: StackConfig): readonly GeneratorId[] {
 
 export const Planner = {
   create(config: StackConfig): ResultValue<GenerationPlan, GenerationError> {
+    if (config.template !== "none") {
+      return Result.ok({ generators: templateGenerators(config) });
+    }
+
     const ordered: Generator[] = [];
     const visited = new Set<GeneratorId>();
     const visiting = new Set<GeneratorId>();
