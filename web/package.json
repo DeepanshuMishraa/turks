@@ -25,5 +25,12 @@
     "tailwindcss-motion": "^1.1.1",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.21.0",
+      "onFail": "download"
+    }
   }
 }

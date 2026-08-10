@@ -7,7 +7,7 @@ import typescript from "../assets/typescript.svg";
 const LANGS = [
   { name: "Python", src: python, modifier: "" },
   { name: "Rust", src: rust, modifier: "lang__logo--rust" },
-  { name: "Go", src: golang, modifier: "" },
+  { name: "Go", src: golang, modifier: "lang__logo--go" },
   { name: "TypeScript", src: typescript, modifier: "" },
 ];
 

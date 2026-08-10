@@ -307,9 +307,10 @@ a {
   width: auto;
 }
 
-/* Rust logo is black on transparent; invert it on dark surfaces */
+/* Rust & Go logos are black on transparent; invert them on dark surfaces */
 @media (prefers-color-scheme: dark) {
-  .lang__logo--rust {
+  .lang__logo--rust,
+  .lang__logo--go {
     filter: invert(1);
   }
 }
